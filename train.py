@@ -14,127 +14,89 @@ from tqdm import tqdm
 import time
 
 from dataset import SepsisDataset 
-from transformer import TimeSeriesClassifier 
+from transformer import TimeSeriesClassifier
 
+from config import *
 
-# SEQ_LEN    = 72
-# SEQ_OFFSET = 24
-# BATCH_SIZE = 8192
-# LR         = 0.001
-# EPOCHS     = 100
-# INPUT_DIM  = 37
-# HIDDEN_DIM = 256
-# FF_DIM     = 2048
-# N_CLASSES  = 2
-# N_HEADS    = 32
-# N_LAYERS   = 10
+def train(train_ids, model, rid):
+    dataset = SepsisDataset(train_ids, seq_len=SEQ_LEN, starting_offset=SEQ_OFFSET)
+    ratio = dataset.get_ratio()
+    pos_weight = int(ratio[0]/ ratio[1])
+    print('neg:pos ratio {} weight {}'.format(ratio, pos_weight))
+    
+    total_size = len(dataset)
+    train_size = int(0.8 * total_size)    # 80% of data for training
+    valid_size = total_size - train_size  # 20% for validation
 
-SEQ_LEN    = 72
-SEQ_OFFSET = 24
-BATCH_SIZE = 32
-LR         = 0.001
-EPOCHS     = 100
-INPUT_DIM  = 37
-HIDDEN_DIM = 64
-FF_DIM     = 128
-N_CLASSES  = 2
-N_HEADS    = 8
-N_LAYERS   = 6
+    # Randomly split dataset into train, validation, and test datasets
+    train_dataset, valid_dataset = random_split(dataset, [train_size, valid_size])
 
-preprocess_method = "standardized"
+    # Create DataLoaders for each dataset
+    train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=4)
+    valid_loader = DataLoader(valid_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=4)
 
-# start a new wandb run to track this script
-wandb.init(
-    # set the wandb project where this run will be logged
-    project="sepsis-transformer",
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    print(device)
 
-    # track hyperparameters and run metadata
-    config={
-        "learning_rate": LR,
-        "architecture": "Transformer",
-        "dataset": "Competition2019",
-        "epochs": EPOCHS,
-        "seqence_length": SEQ_LEN,
-        "preprocessing": preprocess_method,
-        "positional_encoding": True,
-        "time_sequence_alignment": "End",
-        "feature_expand": HIDDEN_DIM,
-        "heads": N_HEADS
-    }
-)
+    model = model.to(device)
 
-dataset = SepsisDataset(seq_len=SEQ_LEN, starting_offset=SEQ_OFFSET)
+    model = torch.nn.DataParallel(model)
+    weights = torch.tensor([1, pos_weight], dtype=torch.float32).to(device)
+    criterion = nn.CrossEntropyLoss(weight=weights).to(device)
+    optimizer = Adam(model.parameters(), lr=LR)
+    
+    model_path = default_model
 
-total_size = len(dataset)
-train_size = int(0.7 * total_size)  # 70% of data for training
-valid_size = int(0.15 * total_size)  # 15% for validation
-test_size = total_size - train_size - valid_size  # Remaining 15% for testing
+    # Training loop
+    try:
+        for epoch in range(EPOCHS):
+            model.train()
+            total_loss = 0
+            print('====== Epoch {} ======'.format(epoch))
+            for batch in tqdm(train_loader):
+                _, _, sequences, masks, labels = batch
+                masks = masks.bool()
+                sequences, masks, labels = sequences.to(device), masks.to(device), labels.to(device)
+                optimizer.zero_grad()
+                outputs = model(sequences, masks)
+                loss = criterion(outputs, labels)
+                loss.backward()
+                torch.nn.utils.clip_grad_norm_(model.parameters(), 0.5)
+                optimizer.step()
+                total_loss += loss.item()
+            print(f'Train Loss: {total_loss / len(train_loader)}')
 
-# Randomly split dataset into train, validation, and test datasets
-train_dataset, valid_dataset, test_dataset = random_split(dataset, [train_size, valid_size, test_size])
+            # Validation loop
+            model.eval()
+            total_val_loss = 0
+            with torch.no_grad():
+                for batch in valid_loader:
+                    _, _, sequences, masks, labels = batch
+                    masks = masks.bool()
+                    sequences, masks, labels = sequences.to(device), masks.to(device), labels.to(device)
+                    outputs = model(sequences, masks)
+                    loss = criterion(outputs, labels)
+                    total_val_loss += loss.item()
+            print(f'Validation Loss: {total_val_loss / len(valid_loader)}')
 
-# Create DataLoaders for each dataset
-train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
-valid_loader = DataLoader(valid_dataset, batch_size=32, shuffle=False)
-test_loader  = DataLoader(test_dataset, batch_size=32, shuffle=False)
+            wandb.log({
+                "train loss"     : total_loss     / len(train_loader),
+                "Validation loss": total_val_loss / len(valid_loader)
+            })
 
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+            if (epoch+1) % 5 == 0:
+                now = datetime.now()
+                timestr = now.strftime("%m_%d_%Y_%H_%M_%S")
+                model_path = '../models/'+rid+'_{}_{}_{:.5f}.pth'.format(timestr, epoch, loss)
+                torch.save(copy.deepcopy(model).cpu().state_dict(), model_path)
 
-model = TimeSeriesClassifier(
-    input_dim  = INPUT_DIM,
-    seq_len    = SEQ_LEN,
-    hidden_dim = HIDDEN_DIM,
-    nheads     = N_HEADS,
-    nlayers    = N_LAYERS,
-    ff_dim     = FF_DIM,
-    nclasses   = N_CLASSES
-).to(device)
-
-model = torch.nn.DataParallel(model)
-weights = torch.tensor([1, 38], dtype=torch.float32).to(device)
-criterion = nn.CrossEntropyLoss(weight=weights).to(device)
-optimizer = Adam(model.parameters(), lr=LR)
-
-# Training loop
-for epoch in range(EPOCHS):
-    model.train()
-    total_loss = 0
-    print('====== Epoch {} ======'.format(epoch))
-    for batch in tqdm(train_loader):
-        sequences, masks, labels = batch
-        sequences, masks, labels = sequences.to(device), masks.to(device), labels.to(device)
-        optimizer.zero_grad()
-        outputs = model(sequences, masks)
-        loss = criterion(outputs, labels)
-        loss.backward()
-        torch.nn.utils.clip_grad_norm_(model.parameters(), 0.5)
-        optimizer.step()
-        total_loss += loss.item()
-    print(f'Train Loss: {total_loss / len(train_dataloader)}')
-
-    # Validation loop
-    model.eval()
-    total_val_loss = 0
-    with torch.no_grad():
-        for batch in valid_loader:
-            sequences, masks, labels = batch
-            sequences, masks, labels = sequences.to(device), masks.to(device), labels.to(device)
-            outputs = model(sequences, masks)
-            loss = criterion(outputs, labels)
-            total_val_loss += loss.item()
-    print(f'Validation Loss: {total_val_loss / len(val_dataloader)}')
-
-    wandb.log({
-        "train loss"     : total_loss     / len(train_dataloader),
-        "Validation loss": total_val_loss / len(val_dataloader)
-    })
-
-    if (epoch+1) % 10 == 0:
-        now = datetime.now()
-        timestr = now.strftime("%m_%d_%Y_%H_%M_%S")
-        torch.save(
-            copy.deepcopy(model).cpu().state_dict(),
-            './models/{}_{}_{:.5f}.pth'.format(timestr, epoch, loss)
-        )
-
-wandb.finish()
+    except KeyboardInterrupt:
+        print("\nTraining interrupted by the user at Epoch {}.".format(epoch))
+        print("Last saved {}".format(5*((epoch+1)//5)-1))
+        return model_path
+        
+    except Exception as e:
+        print("An error occurred:", str(e))
+        return model_path
+    
+    return model_path
