@@ -66,6 +66,7 @@ def evaluate_sepsis_score(label_directory, prediction_directory):
         if os.path.isfile(g) and not f.lower().startswith('.') and f.lower().endswith('psv'):
             label_files.append(g)
     label_files = sorted(label_files)
+    print('Evaluating {} patients'.format(len(label_files)))
 
     prediction_files = []
     for f in os.listdir(prediction_directory):
@@ -278,7 +279,7 @@ def compute_auc(labels, predictions, check_errors=True):
 
     # Summarize contingency table.
     tpr = np.zeros(m)
-    tnr = np.zeros(m)
+    fpr = np.zeros(m)
     ppv = np.zeros(m)
     npv = np.zeros(m)
 
@@ -288,9 +289,9 @@ def compute_auc(labels, predictions, check_errors=True):
         else:
             tpr[j] = 1
         if fp[j] + tn[j]:
-            tnr[j] = tn[j] / (fp[j] + tn[j])
+            fpr[j] = fp[j] / (fp[j] + tn[j])
         else:
-            tnr[j] = 1
+            fpr[j] = 1
         if tp[j] + fp[j]:
             ppv[j] = tp[j] / (tp[j] + fp[j])
         else:
@@ -299,7 +300,7 @@ def compute_auc(labels, predictions, check_errors=True):
             npv[j] = tn[j] / (fn[j] + tn[j])
         else:
             npv[j] = 1
-
+            
     # Compute AUROC as the area under a piecewise linear function with TPR /
     # sensitivity (x-axis) and TNR / specificity (y-axis) and AUPRC as the area
     # under a piecewise constant with TPR / recall (x-axis) and PPV / precision
@@ -307,7 +308,7 @@ def compute_auc(labels, predictions, check_errors=True):
     auroc = 0
     auprc = 0
     for j in range(m-1):
-        auroc += 0.5 * (tpr[j + 1] - tpr[j]) * (tnr[j + 1] + tnr[j])
+        auroc += 0.5 * (tpr[j + 1] + tpr[j]) * (fpr[j + 1] - fpr[j])
         auprc += (tpr[j + 1] - tpr[j]) * ppv[j + 1]
 
     return auroc, auprc
