@@ -152,11 +152,15 @@ def evaluate_model(model, runid, test_loader):
     results = {}
     y_prob = []
     y_label = []
+    method = model.method
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    model = model.to(device)
+    model = torch.nn.DataParallel(model)
     model.eval()
     with torch.no_grad():
         for batch in tqdm(test_loader):
             pid, rid, x_batch, y_batch, _, _ = batch
-            if model.method == 'ResNet':
+            if method == 'ResNet':
                 x_batch = x_batch.unsqueeze(1)
             outputs = model(x_batch).tolist()
             y_label.extend(y_batch.tolist())
