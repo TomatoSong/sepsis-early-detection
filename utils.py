@@ -2,10 +2,12 @@ import os
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-from sklearn.metrics import roc_curve, auc, precision_recall_curve, average_precision_score
+from sklearn.metrics import roc_curve, auc, precision_recall_curve, average_precision_score, confusion_matrix
 from tqdm import tqdm
 import json
 import torch
+import h5py
+
 from config import *
 
 path1 = "../data/training/"
@@ -15,7 +17,8 @@ fnames2 = os.listdir(path2)
 fnames1.sort()
 fnames2.sort()
 
-### all ids from 0 to 40335
+### all pids from 0 to 40335
+### all tids from 0
 def get_patient_by_id_original(idx):
     path   = path1   if idx < 20336 else path2
     fnames = fnames1 if idx < 20336 else fnames2
@@ -26,13 +29,30 @@ def get_patient_by_id_imputed(idx):
     return pd.read_csv('../data/imputed/p'+str(idx).zfill(6)+'.csv')
 
 def get_patient_by_id_normalized(idx):
-    return pd.read_csv('../data/normalized3/p'+str(idx).zfill(6)+'.csv')
+    return pd.read_csv('../data/normalized/p'+str(idx).zfill(6)+'.csv')
 
 def get_patient_by_id_standardized(idx):
     return pd.read_csv('../data/standardized/p'+str(idx).zfill(6)+'.csv')
 
-def get_patient_by_id_standardized_padded(idx):
-    return pd.read_csv('../data/standardized_padded/p'+str(idx).zfill(6)+'.csv')
+def get_synthetic_patient_by_id(idx):
+    return pd.read_csv('../data/synthetic/p{}.csv'.format(str(idx).zfill(6)))
+
+def prepare_hdf5():
+    with h5py.File('../data/patient_data.h5', 'w') as f:
+        for pid in tqdm(range(40336)):
+            p = get_patient_by_id_standardized(pid)[COLS]
+            grp = f.create_group(f'patient_{pid}')
+            grp.create_dataset('data', data=p.to_numpy(), compression='gzip')
+            
+def get_patient_data(pid, start, end):
+    with h5py.File('../data/patient_data.h5', 'r') as f:
+        data = f[f'patient_{pid}/data'][start:end+1]
+    return data.tolist()
+
+def get_synthetic_patient_data(pid, start, end):
+    with h5py.File('../data/synthetic_patient_data.h5', 'r') as f:
+        data = f[f'patient_{pid}/data'][start:end+1]
+    return data.tolist()
 
 def plot(patient):
     sepsis = 1 in patient.SepsisLabel.unique()
@@ -56,14 +76,6 @@ def print_confusion_matrix(y_label, y_pred):
     cm = confusion_matrix(y_label, y_pred)
     print("Confusion Matrix:")
     print(cm)
-    plt.figure(figsize=(6,6))
-    sns.heatmap(cm, annot=True, fmt="d", cmap="Blues", square=True, cbar=False,
-                xticklabels=["Negative", "Positive"],
-                yticklabels=["Negative", "Positive"])
-    plt.xlabel("Predicted label")
-    plt.ylabel("True label")
-    plt.title("Confusion Matrix")
-    plt.show()
 
 def plot_curves(rid, y_true, y_pred_prob):
     fpr, tpr, roc_thres = roc_curve(y_true, y_pred_prob)
@@ -72,6 +84,7 @@ def plot_curves(rid, y_true, y_pred_prob):
     prc_auc = average_precision_score(y_true, y_pred_prob)
     
     # Best cutoff according to ROC
+    roc_thres[0] -= 1
     distances = np.sqrt((1-tpr)**2 + fpr**2)
     best_threshold_roc = roc_thres[np.argmin(distances)]
 
@@ -115,36 +128,63 @@ def plot_curves(rid, y_true, y_pred_prob):
     return best_threshold_roc
 
 def save_pred(results, cutoff, rid):
+    y_pred_trim = []
     y_pred = []
-    dir_path = '../biclass_results/'+rid
+    y_label = []
+    dir_path = '../results/'+rid
     if not os.path.exists(dir_path):
         os.mkdir(dir_path)
     for pid, result in tqdm(results.items()):
+        result = list(dict(sorted(result.items())).values())
+        p = get_patient_by_id_original(pid)
+        if len(p) != len(result):
+            result = [0]*(len(p)-len(result))+result
         df = pd.DataFrame(result, columns=['PredictedProbability'])
         df['PredictedLabel'] = df.apply(lambda row: 1 if row['PredictedProbability']>cutoff else 0, axis=1)
         filename = dir_path+'/p'+str(pid).zfill(6)+'.psv'
         df.to_csv(filename, mode='w+', index=False, header=True, sep='|')
         y_pred.extend(df['PredictedLabel'].tolist())
-    return y_pred
+        y_label.extend(p['SepsisLabel'].tolist())
+    return y_label, y_pred, dir_path
+        
 
-def evaluate_model(model, rid, test_ids):
+def evaluate_model(model, runid, test_loader):
     results = {}
     y_prob = []
     y_label = []
-    for pid in tqdm(test_ids, desc="Evaluating on testset", ascii=False, ncols=75):
-        p = get_patient_by_id_standardized(pid)
-        X = torch.tensor(p[COLS].values.tolist())
-        y = p['SepsisLabel']
-        scores = model.predict(X).tolist()
-        y_label.extend(y)
-        y_prob.extend(scores)
-        results[pid] = scores
+    model.eval()
+    with torch.no_grad():
+        for batch in tqdm(test_loader):
+            pid, rid, x_batch, y_batch, _, _ = batch
+            if model.method == 'ResNet':
+                x_batch = x_batch.unsqueeze(1)
+            outputs = model(x_batch).tolist()
+            y_label.extend(y_batch.tolist())
+            y_prob.extend(outputs)
+            for i, (p, r) in enumerate(zip(pid, rid)):
+                if not p.item() in results:
+                    results[p.item()] = {}
+                results[p.item()][r.item()] = outputs[i] if isinstance(outputs[i], float) else outputs[i][0] 
 
-    filename = '../biclass_results/{}_probs.json'.format(rid)
+    filename = '../results/{}_probs.json'.format(runid)
     with open(filename, 'w') as f:
         json.dump(results, f)
     
     return results, y_label, y_prob
 
-
+def plot_trainset_curves(model, train_loader, rid):
+    model.eval()
+    y_true = []
+    y_prob = []
     
+    with torch.no_grad():
+        for batch in tqdm(train_loader):
+            x_batch, y_batch = batch
+            y_batch = y_batch.unsqueeze(1)
+            x_batch, y_batch = x_batch.to('cuda'), y_batch.to('cuda')
+            outputs = model(x_batch)
+            y_true.extend(y_batch.tolist())
+            y_prob.extend(outputs.tolist())
+    
+    plot_curves(rid+'_train', y_true, y_prob)
+

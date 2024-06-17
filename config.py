@@ -1,8 +1,8 @@
-SEQ_LEN    = 72
-SEQ_OFFSET = 6
-BATCH_SIZE = 1024
+SEQ_LEN    = 120
+SEQ_OFFSET = 48
+BATCH_SIZE = 512
 LR         = 0.001
-EPOCHS     = 75
+EPOCHS     = 100
 INPUT_DIM  = 37
 HIDDEN_DIM = 64
 FF_DIM     = 1024
@@ -15,13 +15,25 @@ ORGAN_N_HEADS    = 4
 ORGAN_N_LAYERS   = 4
 ORGAN_FF_DIM     = 128
 
-train_ids_filepath = "train_ids.json"
-test_ids_filepath = "test_ids.json"
+sepsis_ids_filepath = "../data/sepsis_ids.json"
+train_ids_filepath = "../data/train_ids.json"
+test_ids_filepath = "../data/test_ids.json"
+synthetic_train_ids_filepath = '../data/synthetic_train_ids.json'
+synthetic_test_ids_filepath = '../data/synthetic_test_ids.json'
+label_dirpath = '../results/labels/'
 
 preprocess_method = "standardized_padded"
 default_model = "../models/happy-cloud-13311_18_2023_12_15_49_44_0.31252.pth"
 
-padding_offset = 100
+padding_offset = 350
+POS_WEIGHT = 25
+
+COLS = ['HR', 'O2Sat', 'Temp', 'SBP', 'MAP', 'DBP', 'Resp', 'EtCO2',
+       'BaseExcess', 'HCO3', 'FiO2', 'pH', 'PaCO2', 'SaO2', 'AST', 'BUN',
+       'Alkalinephos', 'Calcium', 'Chloride', 'Creatinine',
+       'Bilirubin_direct', 'Glucose', 'Lactate', 'Magnesium', 'Phosphate',
+       'Potassium', 'Bilirubin_total', 'TroponinI', 'Hct', 'Hgb', 'PTT',
+       'WBC', 'Fibrinogen', 'Platelets', 'Age', 'Gender', 'ICULOS']
 
 clinical_measurements_dict = {
     "Cardiovascular": ["HR", "SBP", "MAP", "DBP", "TroponinI"],

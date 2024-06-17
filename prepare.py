@@ -2,7 +2,7 @@ import json
 import random
 import os
 from config import sepsis_ids_filepath, train_ids_filepath, test_ids_filepath
-from utils import get_patient_by_id_original
+from utils import get_patient_by_id_original, get_patient_by_id_standardized
 
 def train_test_split():
     if not (os.path.exists(sepsis_ids_filepath)):
@@ -46,3 +46,4 @@ def train_test_split():
         json.dump(train_ids, f)
     with open(test_ids_filepath, "w") as f:
         json.dump(test_ids, f)
+        

@@ -1,95 +1,134 @@
-from config import *
-from prepare import train_test_split
-from train import train
-from test import test
+import sys
+sys.path.insert(1, '../src')
+import os
+import numpy as np
+import pandas as pd
+from torch.utils.data import Dataset, DataLoader, Subset
+
+import json
+from tqdm import tqdm
+from datetime import datetime
+import copy
+import argparse
+import re
+
+from utils import *
 from evaluate import evaluate_sepsis_score
-import torch
+from config import *
+from models import *
+from dataset import *
+from prepare import train_test_split
 
-import wandb
 
-import argparse, json, os, sys, time, utils
+def build_dataset(dataset, model_type, window_size):
+    if dataset == 'synthetic':
+        with open(synthetic_train_ids_filepath, "r") as f:
+            train_ids = json.load(f)
+    
+        with open(synthetic_test_ids_filepath, "r") as f:
+            test_ids = json.load(f)
 
-from transformer import TimeSeriesClassifier
+        dataset = SyntheticDataset(train_ids, window_size, window_size)
+        testset = SyntheticDataset(test_ids, window_size, window_size)
+    else:
+        if not (os.path.exists(train_ids_filepath) and os.path.exists(test_ids_filepath)):
+            train_test_split()
+            
+        with open(train_ids_filepath, "r") as f:
+            train_ids = json.load(f)
+    
+        with open(test_ids_filepath, "r") as f:
+            test_ids = json.load(f)
+    
+        if not model_type == 'WeibullCox':
+            dataset = SepsisDataset(train_ids, window_size, window_size)
+            testset = SepsisDataset(test_ids, window_size, window_size)
+        else:
+            dataset = WeibullCoxDataset(train_ids)
+            testset = RawDataset(test_ids)
+    
+    return dataset, testset
+
+
+def build_model(model_type, window_size, config, model_path):
+    assert model_type == config['model']['type'], "Model type not match! Check config!"
+    
+    if model_type == 'Log':
+        model = LogisticRegressionModel((window_size, 37), 1, config, model_path)
+    elif model_type == 'MLP':
+        model = MLPModel((window_size, 37), 1, config, model_path)
+    elif model_type == 'ResNet':
+        model = ResNetModel((window_size, 37), 1, config, model_path)
+    elif model_type == 'WeibullCox':
+        if window_size > 1:
+            raise Exception("Weibull-Cox model got window size > 1!")
+            sys.exit()
+        model = WeibullCoxModel(model_path)
+
+    print('Model has {} parameters'.format(sum(p.numel() for p in model.parameters())))
+    return model
+
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description='Sepsis Early Detection')
+    parser = argparse.ArgumentParser(description="Sepsis binary classification training.")
     
-    if not (os.path.exists(train_ids_filepath) and os.path.exists(test_ids_filepath)):
-        print(f"Generating new train test split.")
-        train_test_split()
-        
-    with open("train_ids.json", "r") as f:
-        train_ids = json.load(f)
-        
-    with open("test_ids.json", "r") as f:
-        test_ids = json.load(f)
-        
-        
-    # start a new wandb run to track this script
-    run = wandb.init(
-        # set the wandb project where this run will be logged
-        project="sepsis-transformer",
+    parser.add_argument('--model-type', type=str, required=True, help='Model architecture')
+    parser.add_argument('--config-path', type=str, default='model_config.json', help='Model configuration file path')
+    parser.add_argument('--batch-size', type=int, default=256, help='Batch size (default: 256)')
+    parser.add_argument('--pos-weight', type=float, default=54.5, help='Positive class weight (default: 54.5)')
+    parser.add_argument('--epochs', type=int, default=25, help='Number of epochs for training (default: 25)')
+    parser.add_argument('--learning-rate', type=float, default=0.001, help='Learning rate (default: 0.001)')
+    parser.add_argument('--load-saved', action='store_true', help='Flag to load saved model path specified in config')
+    parser.add_argument('--window-size', type=int, default=1, help='Length of sliding window for input data')
+    parser.add_argument('--skip-eval', action='store_true', help='Flag to skip model evaluation after trainig')
+    parser.add_argument('--skip-train', action='store_true', help='Flag to skip training')
+    parser.add_argument('--use-val', action='store_true', help='Flag to enable train validation split')
+    parser.add_argument('--dataset', type=str, default='physionet', help='Model architecture')
+    parser.add_argument('--logging', action='store_true', help='Flag to log to wandb')
+    
+    args = parser.parse_args()
 
-        # track hyperparameters and run metadata
-        config={
-            "architecture"       : "Transformer",
-            "dataset"            : "Competition2019",
-            "preprocessing"      : preprocess_method,
-            "seqence_length"     : SEQ_LEN,
-            "seqence_offset"     : SEQ_OFFSET,
-            "seq_alignment"      : "End",
-            "batch_size"         : BATCH_SIZE,
-            "learning_rate"      : LR,
-            "epochs"             : EPOCHS,
-            "input_dim"          : INPUT_DIM,
-            "hidden_dim"         : HIDDEN_DIM,
-            "feedforward_dim"    : FF_DIM,
-            "n_heads"            : N_HEADS,
-            "n_layers"           : N_LAYERS,
-            "n_classes"          : N_CLASSES,
-            "positional_encoding": True
-        }
-    )
-    
-    rid = run.name
-    
-    model = TimeSeriesClassifier(
-        input_dim  = INPUT_DIM,
-        seq_len    = SEQ_LEN,
-        hidden_dim = HIDDEN_DIM,
-        nheads     = N_HEADS,
-        nlayers    = N_LAYERS,
-        ff_dim     = FF_DIM,
-        nclasses   = N_CLASSES
-    )
-    
-    model_path = train(train_ids, model, rid)
-    
-    wandb.finish()
+    dataset, testset = build_dataset(args.dataset, args.model_type, args.window_size)
 
-    rid = 'breezy_bird'
+    with open(args.config_path, 'r') as f:
+        config = json.load(f)
 
-    model_path = '../models/breezy-bird-159_01_15_2024_10_28_37_74_0.38415.pth'
+    if args.load_saved:
+        try:
+            model_path = config['model'].pop('saved_path')
+        except Exception as err:
+            print(f"Error in model path config {err=}, {type(err)=}")
+    else:
+        model_path = None
     
-    saved_model = TimeSeriesClassifier(
-        input_dim  = INPUT_DIM,
-        seq_len    = SEQ_LEN,
-        hidden_dim = HIDDEN_DIM,
-        nheads     = N_HEADS,
-        nlayers    = N_LAYERS,
-        ff_dim     = FF_DIM,
-        nclasses   = N_CLASSES
-    )
-    
-    state_dict = torch.load(model_path, map_location='cpu')
-    cleaned_state_dict = {k.replace('module.', ''): v for k, v in state_dict.items()}
-    saved_model.load_state_dict(cleaned_state_dict)
-    
-    test(test_ids, saved_model, rid)
-    
-    auroc, auprc, accuracy, f_measure, utility = evaluate_sepsis_score('../results/'+rid+'_label/','../results/'+rid+'_pred/')
-    print('AUROC|AUPRC|Accuracy|F-measure|Utility\n{}|{}|{}|{}|{}'.format(auroc, auprc, accuracy, f_measure, utility))
+    model = build_model(args.model_type, args.window_size, config, model_path)
 
-    
-    
-    
+    if not args.skip_train:
+        rid = model.train_model(
+            dataset, 
+            args.use_val, 
+            args.epochs, 
+            args.batch_size, 
+            args.pos_weight, 
+            args.learning_rate, 
+            args.logging
+        )
+    else:
+        pattern = r'[^/]+/[^/]+/([^_]+_[^_]+_[^_]+)'
+        match = re.search(pattern, model_path)
+        if match:
+            rid = match.group(1)
+            print('Using saved model with rid {}'.format(rid))
+        else:
+            print('Error loading saved model {}'.format(model_path))
+            sys.exit()
+
+    if not args.skip_eval:
+        test_loader = DataLoader(testset, batch_size=args.batch_size, shuffle=False, num_workers=24)
+        results, y_label, y_prob = evaluate_model(model, rid, test_loader)
+        cutoff = plot_curves(rid+'_test', y_label, y_prob)
+        y_label, y_pred, pred_dirpath = save_pred(results, cutoff, rid)
+        print('Using cutoff {}'.format(cutoff))
+        print_confusion_matrix(y_label, y_pred)
+        auroc, auprc, accuracy, f_measure, utility = evaluate_sepsis_score(label_dirpath, pred_dirpath)
+        print('AUROC     {:.4f} \nAUPRC     {:.4f} \nAccuracy  {:.4f} \nF-measure {:.4f} \nUtility   {:.4f}\n'.format(auroc, auprc, accuracy, f_measure, utility))
