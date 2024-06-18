@@ -1,4 +1,5 @@
 import torch
+import sys
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader, Subset
@@ -20,8 +21,8 @@ def get_dataloaders(data, train_idx, val_idx, batch_size=256):
     train_subset = Subset(data, train_idx)
     val_subset = Subset(data, val_idx)
 
-    train_loader = DataLoader(train_subset, batch_size=batch_size, shuffle=True, num_workers=24)
-    val_loader = DataLoader(val_subset, batch_size=batch_size, shuffle=False, num_workers=24)
+    train_loader = DataLoader(train_subset, batch_size=batch_size, shuffle=True, num_workers=4)
+    val_loader = DataLoader(val_subset, batch_size=batch_size, shuffle=False, num_workers=4)
     
     return train_loader, val_loader
     
@@ -67,7 +68,8 @@ class BaseModel(nn.Module):
         return
 
     def predict(self, x, **params):
-        x = x.to('cuda')
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        x = x.to(device)
         return self.model(x)
     
     def forward(self, x):
@@ -82,7 +84,7 @@ class BaseModel(nn.Module):
                 folds.append((train_idx, val_idx))
             num_folds = len(folds)
         else:
-            train_loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=24)
+            train_loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=4)
             valid_loader = None
 
         method = self.method
