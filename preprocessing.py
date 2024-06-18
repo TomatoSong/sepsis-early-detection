@@ -12,7 +12,7 @@ from utils import get_patient_by_id_original, get_patient_by_id_imputed, get_pat
 sepsis_indices = []
 for i in tqdm(range(40336), desc="Inspecting sepsis", ascii=False, ncols=75):
     patient = get_patient_by_id_original(i)
-    if 1 in patient.SepsisLabel.unique():
+    if 1 in patient["SepsisLabel"].unique():
         sepsis_indices.append(i)
 
 print('Sepsis count:', len(sepsis_indices))
@@ -59,6 +59,12 @@ normals = {
 }
 
 ### Imputation
+
+dirs = ['imputed', 'normalized', 'standardized']
+for dirname in dirs:
+    dirname = '../data/' + dirname
+    if not os.path.exists(dirname):
+        os.mkdir(dirname)
 
 def impute(patient):
     for col in patient.columns.values[:-7]:
@@ -133,10 +139,21 @@ for i in tqdm(range(40336), desc="Standardizing", ascii=False, ncols=75):
         p[m] = p[m].apply(lambda x: (x - mstat[m]['mean']) / mstat[m]['std'])
     p.to_csv('../data/standardized/p'+str(i).zfill(6)+'.csv', index=False)
     
-### Padding
-for i in tqdm(range(40336), desc="Padding", ascii=False, ncols=75):
-    p = get_patient_by_id_standardized(i)
-    new_rows = pd.DataFrame(0, index=np.arange(100), columns=p.columns, dtype='float32')
-    padded_sequence = pd.concat([new_rows, p])
-    padded_sequence.to_csv('../data/standardized_padded/p'+str(i).zfill(6)+'.csv', index=False)
-    
+# ### Padding
+# for i in tqdm(range(40336), desc="Padding", ascii=False, ncols=75):
+#     p = get_patient_by_id_standardized(i)
+#     new_rows = pd.DataFrame(0, index=np.arange(100), columns=p.columns, dtype='float32')
+#     padded_sequence = pd.concat([new_rows, p])
+#     padded_sequence.to_csv('../data/standardized_padded/p'+str(i).zfill(6)+'.csv', index=False)
+
+from config import test_ids_filepath
+with open(test_ids_filepath, "r") as f:
+    test_ids = json.load(f)
+
+dirpath = '../results/labels/'
+os.mkdir(dirpath)
+for pid in test_ids:
+    p = get_patient_by_id_original(pid)
+    label = p['SepsisLabel']
+    filename = dirpath + '/p' + str(pid).zfill(6) + '.psv'
+    label.to_csv(filename, mode='w+', index=False, header=True, sep='|')
