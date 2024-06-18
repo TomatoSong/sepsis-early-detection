@@ -1,4 +1,5 @@
 import os
+import sys
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -7,6 +8,7 @@ from tqdm import tqdm
 import json
 import torch
 import h5py
+import re
 
 from config import *
 
@@ -14,6 +16,16 @@ path1 = "../data/training/"
 path2 = "../data/training_setB/"
 fnames1 = os.listdir(path1)
 fnames2 = os.listdir(path2)
+for fname in fnames1:
+    match = re.search(r'\.([^.]*)$', fname)
+    if not match or match.group(1) != 'psv':
+        fnames1.remove(fname)
+
+for fname in fnames2:
+    match = re.search(r'\.([^.]*)$', fname)
+    if not match or match.group(1) != 'psv':
+        fnames1.remove(fname)
+        
 fnames1.sort()
 fnames2.sort()
 
@@ -23,7 +35,13 @@ def get_patient_by_id_original(idx):
     path   = path1   if idx < 20336 else path2
     fnames = fnames1 if idx < 20336 else fnames2
     idx    = idx     if idx < 20336 else idx-20336
-    return pd.read_csv(path + fnames[idx],sep='|')
+    file_path = path + fnames[idx]
+    match = re.search(r'\.([^.]*)$', file_path)
+    if match and match.group(1) == 'psv':
+        return pd.read_csv(file_path, sep='|')
+    else:
+        print('Error loading original data {}'.format(file_path))
+        sys.exit()
 
 def get_patient_by_id_imputed(idx):
     return pd.read_csv('../data/imputed/p'+str(idx).zfill(6)+'.csv')
