@@ -124,7 +124,7 @@ if __name__ == "__main__":
             sys.exit()
 
     if not args.skip_eval:
-        test_loader = DataLoader(testset, batch_size=args.batch_size, shuffle=False, num_workers=24)
+        test_loader = DataLoader(testset, batch_size=args.batch_size, shuffle=False, num_workers=4)
         results, y_label, y_prob = evaluate_model(model, rid, test_loader)
         cutoff = plot_curves(rid+'_test', y_label, y_prob)
         y_label, y_pred, pred_dirpath = save_pred(results, cutoff, rid)
