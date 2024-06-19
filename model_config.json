@@ -15,6 +15,6 @@
             {"type": "Linear", "in_features": 1280, "out_features": 1},
             {"type": "Sigmoid"}
         ],
-        "saved_path": "../models/resnet_trial_4_1.25147_06_15_2024_16_36_03.pth"
+        "saved_path": "../models/ResNet_logical-smoke-172_14_1.23275_06_16_2024_17_33_47.pth"
     }
 }

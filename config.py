@@ -22,8 +22,9 @@ synthetic_train_ids_filepath = '../data/synthetic_train_ids.json'
 synthetic_test_ids_filepath = '../data/synthetic_test_ids.json'
 label_dirpath = '../results/labels/'
 
+wandb_project = 'sepsis-prediction'
+
 preprocess_method = "standardized_padded"
-default_model = "../models/happy-cloud-13311_18_2023_12_15_49_44_0.31252.pth"
 
 padding_offset = 350
 POS_WEIGHT = 25

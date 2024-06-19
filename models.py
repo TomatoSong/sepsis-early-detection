@@ -92,8 +92,8 @@ class BaseModel(nn.Module):
         # start a new wandb run to track this script
         if logging:
             run = wandb.init(
-                project="sepsis-bc2",
-                config={
+                project = wandb_project,
+                config = {
                     "architecture"       : method,
                     "model_config"       : self.config,
                     "dataset"            : "Competition2019",

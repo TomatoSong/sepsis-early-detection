@@ -6,7 +6,7 @@ import json
 from tqdm import tqdm
 import time
 
-from utils import get_patient_by_id_original, get_patient_by_id_imputed, get_patient_by_id_normalized, get_patient_by_id_standardized
+from utils import get_patient_by_id_original, get_patient_by_id_imputed, get_patient_by_id_normalized, get_patient_by_id_standardized, prepare_hdf5
 
 ## Write sepsis indices to file
 sepsis_indices = []
@@ -146,6 +146,7 @@ for i in tqdm(range(40336), desc="Standardizing", ascii=False, ncols=75):
 #     padded_sequence = pd.concat([new_rows, p])
 #     padded_sequence.to_csv('../data/standardized_padded/p'+str(i).zfill(6)+'.csv', index=False)
 
+### Save label for test set
 from config import test_ids_filepath
 with open(test_ids_filepath, "r") as f:
     test_ids = json.load(f)
@@ -157,3 +158,6 @@ for pid in test_ids:
     label = p['SepsisLabel']
     filename = dirpath + '/p' + str(pid).zfill(6) + '.psv'
     label.to_csv(filename, mode='w+', index=False, header=True, sep='|')
+
+### Use hdf5 for more efficient data accessing
+prepare_hdf5()
