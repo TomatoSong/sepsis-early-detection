@@ -47,5 +47,15 @@ def train_test_split():
     with open(test_ids_filepath, "w") as f:
         json.dump(test_ids, f)
 
-    # Save test set labels
+    ### Save label for test set
+    with open(test_ids_filepath, "r") as f:
+        test_ids = json.load(f)
+    
+    dirpath = '../results/labels/'
+    os.mkdir(dirpath)
+    for pid in test_ids:
+        p = get_patient_by_id_original(pid)
+        label = p['SepsisLabel']
+        filename = dirpath + '/p' + str(pid).zfill(6) + '.psv'
+        label.to_csv(filename, mode='w+', index=False, header=True, sep='|')
                 

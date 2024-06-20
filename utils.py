@@ -141,6 +141,8 @@ def plot_curves(rid, y_true, y_pred_prob):
         plt.annotate(f'{prc_thres[i]:.4f}', (recall[i], precision[i]), textcoords="offset points", xytext=(10,10))
         
     plt.tight_layout()
+    if not os.path.exists('../plots'):
+        os.mkdir('../plots')
     plt.savefig('../plots/{}.png'.format(rid), dpi=300)
     plt.show()
     return best_threshold_roc
