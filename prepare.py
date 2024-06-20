@@ -48,9 +48,6 @@ def train_test_split():
         json.dump(test_ids, f)
 
     ### Save label for test set
-    with open(test_ids_filepath, "r") as f:
-        test_ids = json.load(f)
-    
     dirpath = '../results/labels/'
     os.mkdir(dirpath)
     for pid in test_ids:
