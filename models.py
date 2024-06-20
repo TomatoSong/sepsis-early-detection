@@ -60,6 +60,8 @@ class BaseModel(nn.Module):
         return
 
     def save_model(self, model, rid, epoch, loss):
+        if not os.path.exists('../models'):
+            os.mkdir(dirpath)
         now = datetime.now()
         timestr = now.strftime("%m_%d_%Y_%H_%M_%S")
         model_path = '../models/{}_{}_{:.5f}_{}.pth'.format(rid, epoch, loss, timestr)
