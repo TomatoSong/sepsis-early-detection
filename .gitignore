@@ -161,3 +161,6 @@ cython_debug/
 
 # Data folder
 ../data/
+
+# Model config file
+model_config.json
