@@ -1,5 +1,6 @@
 import torch
 import sys
+import os
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader, Subset
@@ -15,14 +16,14 @@ from sklearn.model_selection import KFold
 
 from utils import get_patient_by_id_standardized, get_patient_by_id_original
 from config import *
+from loss import UtilityLoss
 
-
-def get_dataloaders(data, train_idx, val_idx, batch_size=256):
+def get_dataloaders(data, train_idx, val_idx, batch_size=256, num_workers=24):
     train_subset = Subset(data, train_idx)
     val_subset = Subset(data, val_idx)
 
-    train_loader = DataLoader(train_subset, batch_size=batch_size, shuffle=True, num_workers=4)
-    val_loader = DataLoader(val_subset, batch_size=batch_size, shuffle=False, num_workers=4)
+    train_loader = DataLoader(train_subset, batch_size=batch_size, shuffle=True, num_workers=num_workers)
+    val_loader = DataLoader(val_subset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
     
     return train_loader, val_loader
     
@@ -77,7 +78,7 @@ class BaseModel(nn.Module):
     def forward(self, x):
         return self.predict(x)
     
-    def train_model(self, dataset, use_val=False, epochs=50, batch_size=256, pos_weight=54.5, lr=0.001, logging=False):
+    def train_model(self, dataset, use_val=False, epochs=50, batch_size=256, pos_weight=54.5, lr=0.001, loss_criterion='BCE', logging=False, num_workers=24):
         if use_val:
             data_indices = np.arange(len(dataset))
             kf = KFold(n_splits=10, shuffle=True, random_state=42)
@@ -86,7 +87,7 @@ class BaseModel(nn.Module):
                 folds.append((train_idx, val_idx))
             num_folds = len(folds)
         else:
-            train_loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=4)
+            train_loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers)
             valid_loader = None
 
         method = self.method
@@ -117,7 +118,14 @@ class BaseModel(nn.Module):
         model = model.to(device)
         model = torch.nn.DataParallel(model)
 
-        criterion = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([pos_weight])).to(device)
+        if loss_criterion == 'BCE':
+            criterion = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([pos_weight])).to(device)
+        elif loss_criterion == 'Utility':
+            criterion = UtilityLoss().to(device)
+        else:
+            print('Error with Loss Criterion {}'.format(loss_criterion))
+            sys.exit()
+
         optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=0.01)
 
         try:
@@ -126,20 +134,23 @@ class BaseModel(nn.Module):
                 if use_val:
                     current_fold = epoch % num_folds
                     train_idx, val_idx = folds[current_fold]
-                    train_loader, valid_loader = get_dataloaders(dataset, train_idx, val_idx, batch_size)
+                    train_loader, valid_loader = get_dataloaders(dataset, train_idx, val_idx, batch_size, num_workers)
 
                 model.train()
                 total_loss = 0
 
                 for batch in tqdm(train_loader):
-                    _, _, x_batch, y_batch, _, _ = batch
+                    _, _, x_batch, y_batch, u_batch, _, _ = batch
                     y_batch = y_batch.unsqueeze(1)
                     if self.method == 'ResNet':
                         x_batch = x_batch.unsqueeze(1)
-                    x_batch, y_batch = x_batch.to(device), y_batch.to(device)
+                    x_batch, y_batch, u_batch = x_batch.to(device), y_batch.to(device), u_batch.to(device)
                     optimizer.zero_grad()
                     outputs = model(x_batch)
-                    loss = criterion(outputs, y_batch)
+                    if not loss_criterion == 'Utility':
+                        loss = criterion(outputs, y_batch)
+                    else:
+                        loss = criterion(outputs, y_batch, u_batch)
                     loss.backward()
                     torch.nn.utils.clip_grad_norm_(model.parameters(), 0.5)
                     optimizer.step()
@@ -152,13 +163,16 @@ class BaseModel(nn.Module):
                     total_val_loss = 0
                     with torch.no_grad():
                         for batch in valid_loader:
-                            _, _, x_batch, y_batch, _, _ = batch
+                            _, _, x_batch, y_batch, u_batch, _, _ = batch
                             if self.method == 'ResNet':
                                 x_batch = x_batch.unsqueeze(1)
                             y_batch = y_batch.unsqueeze(1)
-                            x_batch, y_batch = x_batch.to(device), y_batch.to(device)
+                            x_batch, y_batch, u_batch = x_batch.to(device), y_batch.to(device), u_batch.to(device)
                             outputs = model(x_batch)
-                            loss = criterion(outputs, y_batch)
+                            if not loss_criterion == 'Utility':
+                                loss = criterion(outputs, y_batch)
+                            else:
+                                loss = criterion(outputs, y_batch, u_batch)
                             total_val_loss += loss.item()
                     print(f'Validation Loss: {total_val_loss / len(valid_loader)}')
 

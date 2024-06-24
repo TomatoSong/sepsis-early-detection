@@ -179,7 +179,7 @@ def evaluate_model(model, runid, test_loader):
     model.eval()
     with torch.no_grad():
         for batch in tqdm(test_loader):
-            pid, rid, x_batch, y_batch, _, _ = batch
+            pid, rid, x_batch, y_batch, u_batch, _, _ = batch
             if method == 'ResNet':
                 x_batch = x_batch.unsqueeze(1)
             outputs = model(x_batch).tolist()

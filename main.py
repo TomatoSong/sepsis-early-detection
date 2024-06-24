@@ -85,6 +85,8 @@ if __name__ == "__main__":
     parser.add_argument('--use-val', action='store_true', help='Flag to enable train validation split')
     parser.add_argument('--dataset', type=str, default='physionet', help='Model architecture')
     parser.add_argument('--logging', action='store_true', help='Flag to log to wandb')
+    parser.add_argument('--num-workers', type=int, default=24, help='Number of workers for dataloader, default 24')
+    parser.add_argument('--loss', type=str, default='BCE', help='Loss criterion, default BCE')
     
     args = parser.parse_args()
 
@@ -110,8 +112,10 @@ if __name__ == "__main__":
             args.epochs, 
             args.batch_size, 
             args.pos_weight, 
-            args.learning_rate, 
-            args.logging
+            args.learning_rate,
+            args.loss,
+            args.logging,
+            args.num_workers
         )
     else:
         pattern = r'[^/]+/[^/]+/([^_]+_[^_]+_[^_]+)'
@@ -124,7 +128,7 @@ if __name__ == "__main__":
             sys.exit()
 
     if not args.skip_eval:
-        test_loader = DataLoader(testset, batch_size=args.batch_size, shuffle=False, num_workers=4)
+        test_loader = DataLoader(testset, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers)
         results, y_label, y_prob = evaluate_model(model, rid, test_loader)
         cutoff = plot_curves(rid+'_test', y_label, y_prob)
         y_label, y_pred, pred_dirpath = save_pred(results, cutoff, rid)

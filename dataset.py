@@ -8,6 +8,7 @@ import numpy as np
 from tqdm import tqdm
 from collections import Counter
 import re
+import ast
 
 from utils import get_patient_by_id_original, get_patient_by_id_standardized, get_patient_data, get_synthetic_patient_by_id
 from config import padding_offset
@@ -29,7 +30,7 @@ COLS = ['HR', 'O2Sat', 'Temp', 'SBP', 'MAP', 'DBP', 'Resp', 'EtCO2',
        'WBC', 'Fibrinogen', 'Platelets', 'Age', 'Gender', 'ICULOS']
 
 class SepsisDataset(Dataset):
-    def __init__(self, patient_ids, seq_len=72, starting_offset=24, cols=COLS, method='standardized_padded'):
+    def __init__(self, patient_ids, seq_len=72, starting_offset=24, cols=COLS, method='standardized'):
         self.patient_ids = patient_ids
         self.method = method
         self.seq_len = seq_len
@@ -65,13 +66,14 @@ class SepsisDataset(Dataset):
             patients_all = set()
             if not os.path.exists(path):
                 for pid in tqdm(range(40336), desc="Building idx map", ascii=False, ncols=75):
-                    p = get_patient_by_id_original(pid)
+                    p = get_patient_by_id_standardized(pid)
                     if len(p) < starting_offset:
                         t = len(p)-1
                         label = int(p.at[t, 'SepsisLabel'])
-                        hist = (pid,0,t,label,seq_len-t-1) # patient id, start, end, label, padding
+                        u_weights = ast.literal_eval(p.at[t, 'UtilityWeights'])
+                        hist = (pid,0,t,label,u_weights,seq_len-t-1) # patient id, start, end, label, padding
                         assert hist[2] < len(p)
-                        assert hist[2]-hist[1]+1+hist[4] == seq_len
+                        assert hist[2]-hist[1]+1+hist[5] == seq_len
                         index_map.append(hist)
                         patients_all.add(pid)
                         if pid in self.patient_ids:
@@ -81,9 +83,10 @@ class SepsisDataset(Dataset):
                     else:
                         for t in range(starting_offset-1,len(p)):
                             label = int(p.at[t, 'SepsisLabel'])
-                            hist = (pid,0,t,label, seq_len-t-1) if t < seq_len else (pid,t-seq_len+1,t,label,0)
+                            u_weights = ast.literal_eval(p.at[t, 'UtilityWeights'])
+                            hist = (pid,0,t,label,u_weights,seq_len-t-1) if t < seq_len else (pid,t-seq_len+1,t,label,u_weights,0)
                             assert hist[2] < len(p)
-                            assert hist[2]-hist[1]+1+hist[4] == seq_len
+                            assert hist[2]-hist[1]+1+hist[5] == seq_len
                             index_map.append(hist)
                             patients_all.add(pid)
                             if pid in self.patient_ids:
@@ -98,7 +101,7 @@ class SepsisDataset(Dataset):
                     index_map = json.load(fp)
                     for item in tqdm(index_map, desc="Building idx map subset", ascii=False, ncols=75):
                         pid = item[0]
-                        label = item[-1]
+                        label = item[3]
                         if pid in self.patient_ids:
                             index_map_subset.append(item)
                             self.ratio[label] += 1
@@ -122,12 +125,13 @@ class SepsisDataset(Dataset):
         return (len(self.idxmap_subset))
 
     def __getitem__(self, idx):
-        pid, start, end, label, padding = self.idxmap_subset[idx]
+        pid, start, end, label, u_weights, padding = self.idxmap_subset[idx]
         data = [0]*padding + get_patient_data(pid, start, end)
         mask = [True]*padding + [False]*(self.seq_len-padding)
         assert len(data) == self.seq_len
         assert len(mask) == self.seq_len
-        return pid, end, torch.tensor(data, dtype=torch.float32), torch.tensor(label, dtype=torch.float32), torch.tensor(mask), torch.tensor([])
+        # Return: patient_id, latest_hour, clinical_data, label, utility_weights, mask, empty_tensor
+        return pid, end, torch.tensor(data, dtype=torch.float32), torch.tensor(label, dtype=torch.float32), torch.tensor(u_weights), torch.tensor(mask), torch.tensor([])
 
 
 class RawDataset(Dataset):
@@ -137,11 +141,13 @@ class RawDataset(Dataset):
     def build_index_map(self, pids):
         self.x = []
         self.y = []
+        self.u = []
         self.ids = []
         for pid in tqdm(pids, desc="Preparing data", ascii=False, ncols=75):
             p = get_patient_by_id_standardized(pid)
             self.x.extend(p[COLS].values.tolist())
             self.y.extend(p['SepsisLabel'].tolist())
+            self.u.extend(p['UtilityWeights'].tolist())
             self.ids.extend([(pid, rid) for rid in range(len(p))])
         print('Populated {} dps from {} patients'.format(len(self.y), len(pids)))
         return
@@ -150,7 +156,8 @@ class RawDataset(Dataset):
         return len(self.y)
     
     def __getitem__(self, idx):
-        return self.ids[idx][0], self.ids[idx][1], torch.tensor(self.x[idx], dtype=torch.float32), torch.tensor(self.y[idx], dtype=torch.float32), torch.tensor([]), torch.tensor([])
+        # Return: patient_id, latest_hour, clinical_data, label, utility_weights, empty_tensor, empty_tensor
+        return self.ids[idx][0], self.ids[idx][1], torch.tensor(self.x[idx], dtype=torch.float32), torch.tensor(self.y[idx], dtype=torch.float32), torch.tensor(self.u[idx], dtype=torch.float32), torch.tensor([]), torch.tensor([])
 
 
 class SyntheticDataset(Dataset):
@@ -159,7 +166,6 @@ class SyntheticDataset(Dataset):
         self.patient_ids = pids
         self.ratio = [0,0]
         self.idxmap_subset = self.build_index_map(seq_len, starting_offset)
-
 
     def check_store(self, seq_len, starting_offset):
         try:
@@ -270,6 +276,7 @@ class WeibullCoxDataset(Dataset):
                     self.S = data['S']
                     self.ids = data['ids']
                     self.y = data['y']
+                    self.u = data['u']
                     return
             except Exception as err:
                 print('Error matching saved Weibull-Cox dataset: ', err)
@@ -279,6 +286,7 @@ class WeibullCoxDataset(Dataset):
         self.S = []
         self.ids = []
         self.y = []
+        self.u = []
         for pid in tqdm(pids, desc="Preparing data", ascii=False, ncols=75):
             p = get_patient_by_id_standardized(pid)
             for rid in range(len(p)-5):
@@ -287,8 +295,10 @@ class WeibullCoxDataset(Dataset):
                 tau = max(0.1, window['SepsisLabel'].idxmax()-rid if (window['SepsisLabel'] == 1).any() else 7)
                 x = p.loc[rid, COLS].tolist()
                 y = p.loc[rid, ['SepsisLabel']].tolist()
+                u = p.loc[rid, ['UtilityWeights']].tolist()
                 self.x.append(x)
                 self.y.append(y)
+                self.u.append(u)
                 self.tau.append(tau)
                 self.S.append(S)
                 self.ids.append((pid, rid))
@@ -299,6 +309,7 @@ class WeibullCoxDataset(Dataset):
             'tau' : self.tau,
             'S'   : self.S,
             'y'   : self.y,
+            'u'   : self.u,
             'ids' : self.ids
         }
         with open(path, "w") as f:
@@ -309,4 +320,5 @@ class WeibullCoxDataset(Dataset):
         return len(self.S)
     
     def __getitem__(self, idx):
-        return self.ids[idx][0], self.ids[idx][1], torch.tensor(self.x[idx], dtype=torch.float32), torch.tensor(self.y[idx], dtype=torch.float32), torch.tensor(self.tau[idx], dtype=torch.float32), torch.tensor(self.S[idx], dtype=torch.int32)
+        # Return: patient_id, latest_hour, clinical_data, label, utility_weights, tau, S
+        return self.ids[idx][0], self.ids[idx][1], torch.tensor(self.x[idx], dtype=torch.float32), torch.tensor(self.y[idx], dtype=torch.float32), torch.tensor(self.u[idx], dtype=torch.float32), torch.tensor(self.tau[idx], dtype=torch.float32), torch.tensor(self.S[idx], dtype=torch.int32)

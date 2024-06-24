@@ -146,5 +146,61 @@ for i in tqdm(range(40336), desc="Standardizing", ascii=False, ncols=75):
 #     padded_sequence = pd.concat([new_rows, p])
 #     padded_sequence.to_csv('../data/standardized_padded/p'+str(i).zfill(6)+'.csv', index=False)
 
+
+### Compute Utility Series
+def compute_utility_series(labels, dt_early=-12, dt_optimal=-6, dt_late=3.0, max_u_tp=1, min_u_fn=-2, u_fp=-0.05, u_tn=0):
+    # Ensure labels is a numpy array
+    labels = np.array(labels)
+    
+    # Check if the patient eventually has sepsis
+    if np.any(labels):
+        is_septic = True
+        t_sepsis = np.argmax(labels) - dt_optimal
+    else:
+        is_septic = False
+        t_sepsis = float('inf')
+
+    n = len(labels)
+
+    # Define slopes and intercepts for utility functions of the form u = m * t + b
+    m_1 = max_u_tp / (dt_optimal - dt_early)
+    b_1 = -m_1 * dt_early
+    m_2 = -max_u_tp / (dt_late - dt_optimal)
+    b_2 = -m_2 * dt_late
+    m_3 = min_u_fn / (dt_late - dt_optimal)
+    b_3 = -m_3 * dt_optimal
+
+    u_pred_pos = np.zeros(n)
+    u_pred_neg = np.zeros(n)
+
+    if is_septic:
+        t_diff = np.arange(n) - t_sepsis
+
+        # Assign values for u_pred_pos and u_pred_neg using for loops
+        for t in range(n):
+            if t < t_sepsis + dt_optimal + 1:
+                u_pred_pos[t] = max(m_1 * t_diff[t] + b_1, u_fp)
+            elif t_sepsis + dt_optimal < t <= t_sepsis + dt_late:
+                u_pred_pos[t] = m_2 * t_diff[t] + b_2
+                u_pred_neg[t] = m_3 * t_diff[t] + b_3
+            else:
+                u_pred_pos[t] = 0
+                u_pred_neg[t] = 0
+    else:
+        u_pred_pos[:] = u_fp
+        u_pred_neg[:] = u_tn
+    
+    # Convert numpy arrays to lists if necessary
+    u_pred_pos = u_pred_pos.tolist()
+    u_pred_neg = u_pred_neg.tolist()
+    
+    return list(zip(u_pred_neg, u_pred_pos))
+
+for i in tqdm(range(40336), desc="Computing Utility Series", ascii=False, ncols=75):
+    p = get_patient_by_id_standardized(i)
+    utility_weights = compute_utility_series(p['SepsisLabel'])
+    p['UtilityWeights'] = utility_weights
+    p.to_csv('../data/standardized/p'+str(i).zfill(6)+'.csv', index=False)
+
 ### Use hdf5 for more efficient data accessing
 prepare_hdf5()
