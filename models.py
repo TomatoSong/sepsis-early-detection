@@ -86,9 +86,13 @@ class BaseModel(nn.Module):
             for train_idx, val_idx in kf.split(data_indices):
                 folds.append((train_idx, val_idx))
             num_folds = len(folds)
+            train_len = len(folds[0][0])
+            valid_len = len(folds[0][1])
+            assert train_len + valid_len == len(dataset), "Error during train-validation split!"
         else:
             train_loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers)
             valid_loader = None
+            train_len = len(dataset)
 
         method = self.method
         
@@ -121,7 +125,7 @@ class BaseModel(nn.Module):
         if loss_criterion == 'BCE':
             criterion = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([pos_weight])).to(device)
         elif loss_criterion == 'Utility':
-            criterion = UtilityLoss().to(device)
+            criterion = UtilityLoss(pos_weight).to(device)
         else:
             print('Error with Loss Criterion {}'.format(loss_criterion))
             sys.exit()
@@ -155,7 +159,7 @@ class BaseModel(nn.Module):
                     torch.nn.utils.clip_grad_norm_(model.parameters(), 0.5)
                     optimizer.step()
                     total_loss += loss.item()
-                print(f'Train Loss: {total_loss / len(train_loader)}')
+                print(f'Train Loss: {total_loss / train_len}')
 
                 if valid_loader:
                     # Validation loop
@@ -174,21 +178,21 @@ class BaseModel(nn.Module):
                             else:
                                 loss = criterion(outputs, y_batch, u_batch)
                             total_val_loss += loss.item()
-                    print(f'Validation Loss: {total_val_loss / len(valid_loader)}')
+                    print(f'Validation Loss: {total_val_loss / valid_len}')
 
                 if logging:
                     if valid_loader:
                         wandb.log({
-                            "Train loss"     : total_loss     / len(train_loader),
-                            "Validation loss": total_val_loss / len(valid_loader)
+                            "Train loss"     : total_loss     / train_len,
+                            "Validation loss": total_val_loss / valid_len
                         })
                     else:
                         wandb.log({
-                            "Train loss"     : total_loss     / len(train_loader)
+                            "Train loss"     : total_loss     / train_len
                         })
 
                 if (epoch+1) % 5 == 0:
-                    epoch_loss = total_loss / len(train_loader)
+                    epoch_loss = total_loss / train_len
                     self.save_model(model, rid, epoch, epoch_loss)
 
             self.load_saved_model()
