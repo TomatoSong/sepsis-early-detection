@@ -43,6 +43,7 @@ def build_dataset(dataset, model_type, window_size):
         if not model_type == 'WeibullCox':
             dataset = SepsisDataset(train_ids, window_size, window_size)
             testset = SepsisDataset(test_ids, window_size, window_size)
+            print(f'Composition of datasets: train {dataset.get_ratio()} test {testset.get_ratio()}')
         else:
             dataset = WeibullCoxDataset(train_ids)
             testset = RawDataset(test_ids)
