@@ -51,6 +51,7 @@ class SepsisDataset(Dataset):
                     with open(f, "r") as fp:
                         info = json.load(fp)
                         if info['patient_ids'] == self.patient_ids:
+                            self.ratio = info['ratio']
                             return info['index_map_subset']
         except Exception as e:
             print(f"An error occurred during file search: {e}")
@@ -111,9 +112,16 @@ class SepsisDataset(Dataset):
             assert len(patients_subset) == len(self.patient_ids)
             assert patients_subset == set(self.patient_ids)
             print('len idxmap {}'.format(len(index_map)))
-            path = '../data/idxmap_subset/idxmap_subset_'+str(seq_len)+'_'+str(starting_offset)+'_'+str(len(index_map_subset))+".json"
+            dirname = '../data/idxmap_subset/'
+            if not os.path.exists(dirname):
+                os.mkdir(dirname)
+            path = dirname + 'idxmap_subset_'+str(seq_len)+'_'+str(starting_offset)+'_'+str(len(index_map_subset))+".json"
             with open(path, "w") as fp:
-                json.dump(dict(patient_ids=self.patient_ids, index_map_subset=index_map_subset), fp)
+                json.dump(dict(patient_ids=self.patient_ids,
+                               ratio = self.ratio,
+                               index_map_subset=index_map_subset
+                              ), 
+                          fp)
         
         print('len idxmap subset {}'.format(len(index_map_subset)))
         return index_map_subset
