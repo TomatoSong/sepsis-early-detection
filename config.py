@@ -21,6 +21,7 @@ test_ids_filepath = "../data/test_ids.json"
 synthetic_train_ids_filepath = '../data/synthetic_train_ids.json'
 synthetic_test_ids_filepath = '../data/synthetic_test_ids.json'
 label_dirpath = '../results/labels/'
+normals_filepath = "../data/normals.json"
 
 wandb_project = 'sepsis-prediction'
 
