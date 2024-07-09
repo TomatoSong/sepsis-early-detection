@@ -11,6 +11,7 @@ from datetime import datetime
 import copy
 import argparse
 import re
+import random
 
 from utils import *
 from evaluate import evaluate_sepsis_score
@@ -20,7 +21,10 @@ from dataset import *
 from prepare import train_test_split
 
 
-def build_dataset(dataset, model_type, window_size):
+def build_dataset(dataset, model_type, window_size, start_offset, downsample):
+    if not start_offset:
+        start_offset = window_size
+    
     if dataset == 'synthetic':
         with open(synthetic_train_ids_filepath, "r") as f:
             train_ids = json.load(f)
@@ -28,8 +32,8 @@ def build_dataset(dataset, model_type, window_size):
         with open(synthetic_test_ids_filepath, "r") as f:
             test_ids = json.load(f)
 
-        dataset = SyntheticDataset(train_ids, window_size, window_size)
-        testset = SyntheticDataset(test_ids, window_size, window_size)
+        dataset = SyntheticDataset(train_ids, window_size, start_offset)
+        testset = SyntheticDataset(test_ids, window_size, start_offset)
     else:
         if not (os.path.exists(train_ids_filepath) and os.path.exists(test_ids_filepath)):
             train_test_split()
@@ -39,10 +43,20 @@ def build_dataset(dataset, model_type, window_size):
     
         with open(test_ids_filepath, "r") as f:
             test_ids = json.load(f)
+
+        if downsample != 1:
+            with open(sepsis_ids_filepath, "r") as fp:
+                sepsis_ids = json.load(fp)
+            train_pos = [value for value in train_ids  if value in sepsis_ids]
+            train_neg = list(set(train_ids) - set(train_pos))
+            random.seed(42)
+            train_neg = random.sample(train_neg, int(len(train_neg)*downsample))
+            train_ids = train_pos + train_neg
+            train_ids.sort()
     
         if not model_type == 'WeibullCox':
-            dataset = SepsisDataset(train_ids, window_size, window_size)
-            testset = SepsisDataset(test_ids, window_size, window_size)
+            dataset = SepsisDataset(train_ids, window_size, start_offset)
+            testset = SepsisDataset(test_ids, window_size, start_offset)
             print(f'Composition of datasets: train {dataset.get_ratio()} test {testset.get_ratio()}')
         else:
             dataset = WeibullCoxDataset(train_ids)
@@ -81,17 +95,25 @@ if __name__ == "__main__":
     parser.add_argument('--learning-rate', type=float, default=0.001, help='Learning rate (default: 0.001)')
     parser.add_argument('--load-saved', action='store_true', help='Flag to load saved model path specified in config')
     parser.add_argument('--window-size', type=int, default=1, help='Length of sliding window for input data')
+    parser.add_argument('--start-offset', type=int, default=None, help='Minimum number of valid dps in a window')
     parser.add_argument('--skip-eval', action='store_true', help='Flag to skip model evaluation after trainig')
     parser.add_argument('--skip-train', action='store_true', help='Flag to skip training')
     parser.add_argument('--use-val', action='store_true', help='Flag to enable train validation split')
     parser.add_argument('--dataset', type=str, default='physionet', help='Model architecture')
     parser.add_argument('--logging', action='store_true', help='Flag to log to wandb')
-    parser.add_argument('--num-workers', type=int, default=24, help='Number of workers for dataloader, default 24')
+    parser.add_argument('--num-workers', type=int, default=24, help='Number of workers for dataloader (default 24)')
     parser.add_argument('--loss', type=str, default='BCE', help='Loss criterion, default BCE')
+    parser.add_argument('--downsample', type=float, default=1, help='Rate to downsample negative class in training set (e.g. 0.1)')
     
     args = parser.parse_args()
 
-    dataset, testset = build_dataset(args.dataset, args.model_type, args.window_size)
+    dataset, testset = build_dataset(
+        args.dataset, 
+        args.model_type, 
+        args.window_size,
+        args.start_offset,
+        args.downsample
+    )
 
     with open(args.config_path, 'r') as f:
         config = json.load(f)
