@@ -47,3 +47,16 @@
         "saved_path": "../models/resnet_trial_4_1.25147_06_15_2024_16_36_03.pth"
     }
 }
+
+{
+    "model": {
+        "type": "Transformer",
+        "layers": [
+            {"type": "Flatten"},
+            {"type": "Linear", "in_features": 222, "out_features": 512},
+            {"type": "TransformerEncoderLayer", "d_model": 512, "nhead": 8, "dim_feedforward": 2048, "dropout": 0.1},
+            {"type": "Linear", "in_features": 512, "out_features": 1},
+            {"type": "Sigmoid"}
+        ]
+    }
+}

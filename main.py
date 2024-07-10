@@ -74,6 +74,8 @@ def build_model(model_type, window_size, config, model_path):
         model = MLPModel((window_size, 37), 1, config, model_path)
     elif model_type == 'ResNet':
         model = ResNetModel((window_size, 37), 1, config, model_path)
+    elif model_type == 'Transformer':
+        model = TransformerModel((window_size, 37), 1, config, model_path)
     elif model_type == 'WeibullCox':
         if window_size > 1:
             raise Exception("Weibull-Cox model got window size > 1!")

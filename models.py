@@ -287,6 +287,21 @@ class ResNetModel(BaseModel):
         self.model = nn.Sequential(*self.layers)
         self.model_path = model_path
         self.load_saved_model()
+
+
+class TransformerModel(BaseModel):
+    def __init__(self, input_size, output_size, config, model_path=None):
+        super().__init__()
+        self.method = 'Transformer'
+        self.config = config
+        self.layers = self.make_layers(self.config['model']['layers'])
+        self.model = nn.Sequential(*self.layers)
+        self.model_path = model_path
+        self.load_saved_model()
+
+    def forward(self, x):
+        x = x.flatten(start_dim=1)  # Flatten the input if not already
+        return self.predict(x)
             
 
 class WeibullCoxModel(BaseModel):
