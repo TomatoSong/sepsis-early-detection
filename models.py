@@ -328,7 +328,7 @@ class WeibullCoxModel(BaseModel):
         likelihood = (1 - S) * pos_weight * (torch.log(k) - torch.log(lambda_) + (k - 1) * torch.log(tau_lambda_ratio) + torch.matmul(x, beta)) - (tau_lambda_ratio ** k) * exp_beta_x
         return likelihood.sum()
 
-    def predict(self, x):
+    def forward(self, x, **param):
         tau = 6
         x = torch.tensor(x, dtype=torch.float32) if not isinstance(x, torch.Tensor) else x
         lambda_ = F.softplus(self.lambda_raw)
@@ -340,7 +340,7 @@ class WeibullCoxModel(BaseModel):
 
         return probs.squeeze()
     
-    def train_model(self, dataset, use_val=False, epochs=200, batch_size=2048, pos_weight=54.5, lr=0.01, logging=True):
+    def train_model(self, dataset, use_val=False, epochs=50, batch_size=256, pos_weight=54.5, lr=0.001, loss_criterion='BCE', logging=False, num_workers=24):
         train_loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
         optimizer = torch.optim.Adam([self.lambda_raw, self.k_raw, self.beta], lr=lr)
         
@@ -367,7 +367,8 @@ class WeibullCoxModel(BaseModel):
         
         for epoch in range(epochs):
             total_loss = 0
-            for _, _, x_batch, _, tau_batch, S_batch in tqdm(train_loader, desc="Epoch {}".format(epoch), ascii=False, ncols=75):
+            # patient_id, latest_hour, clinical_data, label, utility_weights, tau, S
+            for _, _, x_batch, _, _, tau_batch, S_batch in tqdm(train_loader, desc="Epoch {}".format(epoch), ascii=False, ncols=75):
                 optimizer.zero_grad()
                 loss = -self.log_likelihood(x_batch, tau_batch, S_batch, pos_weight)
                 loss.backward()

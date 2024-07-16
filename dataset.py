@@ -273,8 +273,8 @@ class WeibullCoxDataset(Dataset):
         
     def build_index_map(self, pids):
         path = '../data/wc_dataset.json'
-        with open(path, 'r') as f:
-            try:
+        try:
+            with open(path, 'r') as f:
                 data = json.load(f)
                 if set(data['pids']) == set(pids):
                     self.x = data['x']
@@ -284,8 +284,8 @@ class WeibullCoxDataset(Dataset):
                     self.y = data['y']
                     self.u = data['u']
                     return
-            except Exception as err:
-                print('Error matching saved Weibull-Cox dataset: ', err)
+        except Exception as err:
+            print('Failed matching saved Weibull-Cox dataset: ', err)
         
         self.x = []
         self.tau = []
