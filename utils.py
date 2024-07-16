@@ -148,10 +148,17 @@ def plot_curves(rid, y_true, y_pred_prob):
     return best_threshold_roc
 
 def save_pred(results, cutoff, rid):
+    pure_fn = 0
+    pure_fp = 0
+    pure_tp = 0
+    pure_tn = 0
+    
     y_pred_trim = []
     y_pred = []
     y_label = []
     dir_path = '../results/'+rid
+
+    total_patient = len(results)
     if not os.path.exists(dir_path):
         os.mkdir(dir_path)
     for pid, result in tqdm(results.items()):
@@ -163,8 +170,28 @@ def save_pred(results, cutoff, rid):
         df['PredictedLabel'] = df.apply(lambda row: 1 if row['PredictedProbability']>cutoff else 0, axis=1)
         filename = dir_path+'/p'+str(pid).zfill(6)+'.psv'
         df.to_csv(filename, mode='w+', index=False, header=True, sep='|')
-        y_pred.extend(df['PredictedLabel'].tolist())
-        y_label.extend(p['SepsisLabel'].tolist())
+
+        patient_pred = df['PredictedLabel'].tolist()
+        patient_label = p['SepsisLabel'].tolist()
+
+        y_pred.extend(patient_pred)
+        y_label.extend(patient_label)
+
+        if 1 in patient_label:
+            if patient_pred == patient_label:
+                pure_tp += 1
+            elif not 1 in patient_pred:
+                pure_fn += 1
+        else:
+            if patient_pred == patient_label:
+                pure_tn += 1
+            elif 1 in patient_pred:
+                pure_fp += 1
+
+    miss_classified = total_patient - pure_tp - pure_fn - pure_tn - pure_fp
+    print(f"TP {pure_tp} FN {pure_fn} TN {pure_tn} FP {pure_fp}")
+    print(f"Miss classified {miss_classified}")
+        
     return y_label, y_pred, dir_path
         
 
