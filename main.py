@@ -147,7 +147,7 @@ if __name__ == "__main__":
             args.logging,
             args.num_workers
         )
-    else:
+    elif model_path:
         pattern = r'[^/]+/[^/]+/([^_]+_[^_]+_[^_]+)'
         match = re.search(pattern, model_path)
         if match:
@@ -156,6 +156,9 @@ if __name__ == "__main__":
         else:
             print('Error loading saved model {}'.format(model_path))
             sys.exit()
+    else:
+        rid = args.model_type + '_trial'
+        print('Using initialized model')
 
     if not args.skip_eval:
         test_loader = DataLoader(testset, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers)
