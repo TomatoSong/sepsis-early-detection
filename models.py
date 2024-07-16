@@ -77,13 +77,8 @@ class BaseModel(nn.Module):
         self.model_path = model_path
         return
 
-    def predict(self, x, **params):
-        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        x = x.to(device)
+    def forward(self, x, **kwargs):
         return self.model(x)
-    
-    def forward(self, x):
-        return self.predict(x)
     
     def train_model(self, dataset, use_val=False, epochs=50, batch_size=256, pos_weight=54.5, lr=0.001, loss_criterion='BCE', logging=False, num_workers=24):
         if use_val:
