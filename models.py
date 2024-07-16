@@ -37,11 +37,18 @@ class BaseModel(nn.Module):
 
         for layer in layers_config:
             layer_type = layer.pop('type')
-            if layer_type == "ResidualBlock":
-                layers.append(ResidualBlockGroup(**layer))
-            else:
-                layer_class = getattr(nn, layer_type)
-                layers.append(layer_class(**layer))
+            layer_class = globals().get(layer_type)
+
+            try:
+                if layer_class:
+                    layers.append(layer_class(**layer))
+                else:
+                    layer_class = getattr(nn, layer_type)
+                    layers.append(layer_class(**layer))
+                layer['type'] = layer_type
+            
+            except ValueError as err:
+                print((f'Layer type {layer_type} not found in local or nn'))
     
         return layers
 
