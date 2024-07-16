@@ -21,9 +21,10 @@ from dataset import *
 from prepare import train_test_split
 
 
-def build_dataset(dataset, model_type, window_size, start_offset, downsample):
-    if not start_offset:
-        start_offset = window_size
+def build_dataset(dataset, model_type, data_config, downsample):
+    window_size = data_config["window_size"]
+    start_offset = data_config["start_offset"]
+    columns = data_config["columns"]
     
     if dataset == 'synthetic':
         with open(synthetic_train_ids_filepath, "r") as f:
@@ -32,8 +33,8 @@ def build_dataset(dataset, model_type, window_size, start_offset, downsample):
         with open(synthetic_test_ids_filepath, "r") as f:
             test_ids = json.load(f)
 
-        dataset = SyntheticDataset(train_ids, window_size, start_offset)
-        testset = SyntheticDataset(test_ids, window_size, start_offset)
+        dataset = SyntheticDataset(train_ids, window_size, start_offset, columns)
+        testset = SyntheticDataset(test_ids, window_size, start_offset,columns)
     else:
         if not (os.path.exists(train_ids_filepath) and os.path.exists(test_ids_filepath)):
             train_test_split()
@@ -55,8 +56,8 @@ def build_dataset(dataset, model_type, window_size, start_offset, downsample):
             train_ids.sort()
     
         if not model_type == 'WeibullCox':
-            dataset = SepsisDataset(train_ids, window_size, start_offset)
-            testset = SepsisDataset(test_ids, window_size, start_offset)
+            dataset = SepsisDataset(train_ids, window_size, start_offset, columns)
+            testset = SepsisDataset(test_ids, window_size, start_offset, columns)
             print(f'Composition of datasets: train {dataset.get_ratio()} test {testset.get_ratio()}')
         else:
             dataset = WeibullCoxDataset(train_ids)
@@ -65,17 +66,20 @@ def build_dataset(dataset, model_type, window_size, start_offset, downsample):
     return dataset, testset
 
 
-def build_model(model_type, window_size, config, model_path):
+def build_model(model_type, config, model_path):
     assert model_type == config['model']['type'], "Model type not match! Check config!"
     
+    input_shape = config['model']['input_shape']
+    assert config['data']['window_size'] == input_shape[0], "Window size not match! Check config!"
+    
     if model_type == 'Log':
-        model = LogisticRegressionModel((window_size, 37), 1, config, model_path)
+        model = LogisticRegressionModel(input_shape, 1, config, model_path)
     elif model_type == 'MLP':
-        model = MLPModel((window_size, 37), 1, config, model_path)
+        model = MLPModel(input_shape, 1, config, model_path)
     elif model_type == 'ResNet':
-        model = ResNetModel((window_size, 37), 1, config, model_path)
+        model = ResNetModel(input_shape, 1, config, model_path)
     elif model_type == 'Transformer':
-        model = TransformerModel((window_size, 37), 1, config, model_path)
+        model = TransformerModel(input_shape, 1, config, model_path)
     elif model_type == 'WeibullCox':
         if window_size > 1:
             raise Exception("Weibull-Cox model got window size > 1!")
@@ -96,8 +100,6 @@ if __name__ == "__main__":
     parser.add_argument('--epochs', type=int, default=25, help='Number of epochs for training (default: 25)')
     parser.add_argument('--learning-rate', type=float, default=0.001, help='Learning rate (default: 0.001)')
     parser.add_argument('--load-saved', action='store_true', help='Flag to load saved model path specified in config')
-    parser.add_argument('--window-size', type=int, default=1, help='Length of sliding window for input data')
-    parser.add_argument('--start-offset', type=int, default=None, help='Minimum number of valid dps in a window')
     parser.add_argument('--skip-eval', action='store_true', help='Flag to skip model evaluation after trainig')
     parser.add_argument('--skip-train', action='store_true', help='Flag to skip training')
     parser.add_argument('--use-val', action='store_true', help='Flag to enable train validation split')
@@ -109,16 +111,15 @@ if __name__ == "__main__":
     
     args = parser.parse_args()
 
+    with open(args.config_path, 'r') as f:
+        config = json.load(f)
+
     dataset, testset = build_dataset(
         args.dataset, 
         args.model_type, 
-        args.window_size,
-        args.start_offset,
+        config['data'],
         args.downsample
     )
-
-    with open(args.config_path, 'r') as f:
-        config = json.load(f)
 
     if args.load_saved:
         try:
@@ -128,7 +129,11 @@ if __name__ == "__main__":
     else:
         model_path = None
     
-    model = build_model(args.model_type, args.window_size, config, model_path)
+    model = build_model(
+        args.model_type, 
+        config, 
+        model_path
+    )
 
     if not args.skip_train:
         rid = model.train_model(

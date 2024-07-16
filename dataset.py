@@ -9,9 +9,10 @@ from tqdm import tqdm
 from collections import Counter
 import re
 import ast
+import sys
 
 from utils import get_patient_by_id_original, get_patient_by_id_standardized, get_patient_data, get_synthetic_patient_by_id
-from config import padding_offset
+from config import All_COLS
 
 DATA_FOLDER = "../data"
 processing = {
@@ -22,16 +23,10 @@ processing = {
     "standardized_padded": "/standardized_padded/"
 }
 
-COLS = ['HR', 'O2Sat', 'Temp', 'SBP', 'MAP', 'DBP', 'Resp', 'EtCO2',
-       'BaseExcess', 'HCO3', 'FiO2', 'pH', 'PaCO2', 'SaO2', 'AST', 'BUN',
-       'Alkalinephos', 'Calcium', 'Chloride', 'Creatinine',
-       'Bilirubin_direct', 'Glucose', 'Lactate', 'Magnesium', 'Phosphate',
-       'Potassium', 'Bilirubin_total', 'TroponinI', 'Hct', 'Hgb', 'PTT',
-       'WBC', 'Fibrinogen', 'Platelets', 'Age', 'Gender', 'ICULOS']
-
 class SepsisDataset(Dataset):
-    def __init__(self, patient_ids, seq_len=72, starting_offset=24, cols=COLS, method='standardized'):
+    def __init__(self, patient_ids, seq_len, starting_offset, columns, method='standardized'):
         self.patient_ids = patient_ids
+        self.columns = columns
         self.method = method
         self.seq_len = seq_len
         self.ratio = [0,0]
@@ -134,7 +129,8 @@ class SepsisDataset(Dataset):
 
     def __getitem__(self, idx):
         pid, start, end, label, u_weights, padding = self.idxmap_subset[idx]
-        data = [0]*padding + get_patient_data(pid, start, end)
+        data = get_patient_data(pid, start, end)
+        data = [[0]*len(self.columns)]*padding + data
         mask = [True]*padding + [False]*(self.seq_len-padding)
         assert len(data) == self.seq_len
         assert len(mask) == self.seq_len
@@ -169,9 +165,10 @@ class RawDataset(Dataset):
 
 
 class SyntheticDataset(Dataset):
-    def __init__(self, pids, seq_len=72, starting_offset=24):
+    def __init__(self, pids, seq_len, starting_offset, columns):
         self.seq_len = seq_len
         self.patient_ids = pids
+        self.columns = columns
         self.ratio = [0,0]
         self.idxmap_subset = self.build_index_map(seq_len, starting_offset)
 

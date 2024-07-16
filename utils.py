@@ -58,10 +58,10 @@ def get_synthetic_patient_by_id(idx):
 def prepare_hdf5():
     with h5py.File('../data/patient_data.h5', 'w') as f:
         for pid in tqdm(range(40336)):
-            p = get_patient_by_id_standardized(pid)[COLS]
+            p = get_patient_by_id_standardized(pid)[All_COLS]
             grp = f.create_group(f'patient_{pid}')
             grp.create_dataset('data', data=p.to_numpy(), compression='gzip')
-            
+
 def get_patient_data(pid, start, end):
     with h5py.File('../data/patient_data.h5', 'r') as f:
         data = f[f'patient_{pid}/data'][start:end+1]
