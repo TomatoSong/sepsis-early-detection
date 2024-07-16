@@ -155,12 +155,13 @@ def compute_utility_series(labels, dt_early=-12, dt_optimal=-6, dt_late=3.0, max
     u_pred_pos = u_pred_pos.tolist()
     u_pred_neg = u_pred_neg.tolist()
     
-    return list(zip(u_pred_neg, u_pred_pos))
+    return u_pred_neg, u_pred_pos
 
 for i in tqdm(range(40336), desc="Computing Utility Series", ascii=False, ncols=75):
     p = get_patient_by_id_standardized(i)
-    utility_weights = compute_utility_series(p['SepsisLabel'])
-    p['UtilityWeights'] = utility_weights
+    u_pred_neg, u_pred_pos = compute_utility_series(p['SepsisLabel'])
+    p['UtilityPos'] = u_pred_pos
+    p['UtilityNeg'] = u_pred_neg
     p.to_csv('../data/standardized/p'+str(i).zfill(6)+'.csv', index=False)
 
 ### Use hdf5 for more efficient data accessing
