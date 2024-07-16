@@ -317,7 +317,7 @@ class WeibullCoxModel(BaseModel):
         else:
             self.lambda_raw = nn.Parameter(torch.tensor([0.0], requires_grad=True))
             self.k_raw = nn.Parameter(torch.tensor([0.0], requires_grad=True))
-            self.beta = nn.Parameter(torch.randn(37, requires_grad=True))
+            self.beta = nn.Parameter(torch.randn(40, requires_grad=True))
             
     def log_likelihood(self, x, tau, S, pos_weight):
         lambda_ = F.softplus(self.lambda_raw)
