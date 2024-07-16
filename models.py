@@ -60,7 +60,7 @@ class BaseModel(nn.Module):
                 self.model.load_state_dict(cleaned_state_dict)
                 print('Loaded saved model ' + self.model_path)
             except:
-                print('Failed loading model {}' + self.model_path)
+                print('Failed loading model ' + self.model_path)
                 sys.exit()
         else:
             print('Not using saved model.')

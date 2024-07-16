@@ -193,7 +193,7 @@ def evaluate_model(model, runid, test_loader):
     filename = '../results/{}_probs.json'.format(runid)
     with open(filename, 'w') as f:
         json.dump(results, f)
-    
+
     return results, y_label, y_prob
 
 def plot_trainset_curves(model, train_loader, rid):
