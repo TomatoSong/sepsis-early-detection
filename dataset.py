@@ -66,8 +66,8 @@ class SepsisDataset(Dataset):
                     if len(p) < starting_offset:
                         t = len(p)-1
                         label = int(p.at[t, 'SepsisLabel'])
-                        u_weights = ast.literal_eval(p.at[t, 'UtilityWeights'])
-                        hist = (pid,0,t,label,u_weights,seq_len-t-1) # patient id, start, end, label, padding
+                        u_weights = [p.loc[t, 'UtilityNeg'], p.loc[t, 'UtilityPos']]
+                        hist = (pid,0,t,label,u_weights,seq_len-t-1) # patient id, start, end, label, utility, padding
                         assert hist[2] < len(p)
                         assert hist[2]-hist[1]+1+hist[5] == seq_len
                         index_map.append(hist)
@@ -79,7 +79,7 @@ class SepsisDataset(Dataset):
                     else:
                         for t in range(starting_offset-1,len(p)):
                             label = int(p.at[t, 'SepsisLabel'])
-                            u_weights = ast.literal_eval(p.at[t, 'UtilityWeights'])
+                            u_weights = [p.loc[t, 'UtilityNeg'], p.loc[t, 'UtilityPos']]
                             hist = (pid,0,t,label,u_weights,seq_len-t-1) if t < seq_len else (pid,t-seq_len+1,t,label,u_weights,0)
                             assert hist[2] < len(p)
                             assert hist[2]-hist[1]+1+hist[5] == seq_len
@@ -147,11 +147,12 @@ class RawDataset(Dataset):
         self.y = []
         self.u = []
         self.ids = []
-        for pid in tqdm(pids, desc="Preparing data", ascii=False, ncols=75):
+        for pid in tqdm(pids, desc="Preparing raw data", ascii=False, ncols=75):
             p = get_patient_by_id_standardized(pid)
-            self.x.extend(p[COLS].values.tolist())
+            self.x.extend(p[All_COLS].values.tolist())
             self.y.extend(p['SepsisLabel'].tolist())
-            self.u.extend(p['UtilityWeights'].tolist())
+            u = p.apply(lambda row: [row['UtilityNeg'], row['UtilityPos']], axis=1).tolist()
+            self.u.extend(u)
             self.ids.extend([(pid, rid) for rid in range(len(p))])
         print('Populated {} dps from {} patients'.format(len(self.y), len(pids)))
         return
@@ -298,9 +299,9 @@ class WeibullCoxDataset(Dataset):
                 window = p.iloc[rid:min(len(p),rid+6),:]
                 S = 0 if (window['SepsisLabel'] == 1).any() else 1
                 tau = max(0.1, window['SepsisLabel'].idxmax()-rid if (window['SepsisLabel'] == 1).any() else 7)
-                x = p.loc[rid, COLS].tolist()
-                y = p.loc[rid, ['SepsisLabel']].tolist()
-                u = p.loc[rid, ['UtilityWeights']].tolist()
+                x = p.loc[rid, All_COLS].astype(float).tolist()
+                y = p.loc[rid, ['SepsisLabel']].astype(int).tolist()
+                u = [p.loc[rid, 'UtilityNeg'], p.loc[rid, 'UtilityPos']]
                 self.x.append(x)
                 self.y.append(y)
                 self.u.append(u)
