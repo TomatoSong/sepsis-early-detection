@@ -11,7 +11,7 @@ def train_test_split():
         nonsepsis_ids = []
         for pid in range(40336):
             p = get_patient_by_id_original(pid)
-            if (p['SepsisLabel'] == 0).all():
+            if not (p['SepsisLabel'] == 0).all():
                 sepsis_ids.append(pid)
             else:
                 nonsepsis_ids.append(pid)
