@@ -41,10 +41,14 @@ def impute(patient):
             normal = normals[col]['avg']
         patient.ffill(inplace=True)
         patient[col].fillna(normal, inplace=True)
+    patient.fillna({'Unit1': 0, 'Unit2': 0, 'HospAdmTime': 0}, inplace=True)
     return patient
 
 def sanity_check(patient):
+    # Remove DBP that are not smaller than SBP
     patient['DBP'] = patient.apply(lambda row: np.nan if row['SBP'] <= row['DBP'] else row['DBP'], axis=1)
+    # Replace positive numbers with the opposite
+    patient.loc[patient['HospAdmTime'] > 0, 'HospAdmTime'] *= -1
     for column, info in normals.items():
         patient[column] = patient[column].apply(lambda x: np.nan if (x < info['accept'][0] or x > info['accept'][1]) else x)
     return patient
@@ -53,13 +57,13 @@ for idx in tqdm(range(40336), desc="Imputing", ascii=False, ncols=75):
     p = get_patient_by_id_original(idx)
     p = sanity_check(p)
     p = impute(p)
-    assert p.iloc[:,:-5].isnull().values.any() == False
+    assert p.isnull().values.any() == False
     p.to_csv('../data/imputed/p'+str(idx).zfill(6)+'.csv', index=False)
 
 
 ### Normalization and Standardization
 p = get_patient_by_id_imputed(sepsis_indices[74])
-measurements = p.columns.drop(['Unit1','Unit2','Gender','HospAdmTime','SepsisLabel'])
+measurements = p.columns.drop(['Unit1','Unit2','Gender','SepsisLabel'])
 mstat = {m:{'max':-np.inf, 'min':np.inf, 'sum':0, 'mean':0, 'std':0} for m in measurements}
 
 count = 0
