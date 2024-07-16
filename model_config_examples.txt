@@ -52,10 +52,11 @@
     "model": {
         "type": "Transformer",
         "layers": [
-            {"type": "Flatten"},
-            {"type": "Linear", "in_features": 222, "out_features": 512},
-            {"type": "TransformerEncoderLayer", "d_model": 512, "nhead": 8, "dim_feedforward": 2048, "dropout": 0.1},
+            {"type": "Linear", "in_features": 38, "out_features": 512},
+            {"type": "PositionalEncoding", "d_model": 512, "seq_len": 36, "dropout": 0.1},
+            {"type": "TransformerEncoderLayer", "d_model": 512, "nhead": 8, "dim_feedforward": 2048, "dropout": 0.1, "batch_first": true},
             {"type": "Linear", "in_features": 512, "out_features": 1},
+            {"type": "MaxLayer"},
             {"type": "Sigmoid"}
         ]
     }
