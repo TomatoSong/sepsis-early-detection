@@ -146,13 +146,17 @@ class BaseModel(nn.Module):
                 total_loss = 0
 
                 for batch in tqdm(train_loader):
-                    _, _, x_batch, y_batch, u_batch, _, _ = batch
+                    _, _, x_batch, y_batch, u_batch, mask_batch, _ = batch
                     y_batch = y_batch.unsqueeze(1)
                     if self.method == 'ResNet':
                         x_batch = x_batch.unsqueeze(1)
                     x_batch, y_batch, u_batch = x_batch.to(device), y_batch.to(device), u_batch.to(device)
                     optimizer.zero_grad()
-                    outputs = model(x_batch)
+                    if self.method == 'Transformer':
+                        mask_batch = mask_batch.to(device)
+                        outputs = self.forward(x_batch, mask=mask_batch)
+                    else:
+                        outputs = model(x_batch)
                     if not loss_criterion == 'Utility':
                         loss = criterion(outputs, y_batch)
                     else:
@@ -169,12 +173,16 @@ class BaseModel(nn.Module):
                     total_val_loss = 0
                     with torch.no_grad():
                         for batch in valid_loader:
-                            _, _, x_batch, y_batch, u_batch, _, _ = batch
+                            _, _, x_batch, y_batch, u_batch, mask_batch, _ = batch
+                            y_batch = y_batch.unsqueeze(1)
                             if self.method == 'ResNet':
                                 x_batch = x_batch.unsqueeze(1)
-                            y_batch = y_batch.unsqueeze(1)
                             x_batch, y_batch, u_batch = x_batch.to(device), y_batch.to(device), u_batch.to(device)
-                            outputs = model(x_batch)
+                            if self.method == 'Transformer':
+                                mask_batch = mask_batch.to(device)
+                                outputs = self.forward(x_batch, mask=mask_batch)
+                            else:
+                                outputs = model(x_batch)
                             if not loss_criterion == 'Utility':
                                 loss = criterion(outputs, y_batch)
                             else:
@@ -301,9 +309,17 @@ class TransformerModel(BaseModel):
         self.model_path = model_path
         self.load_saved_model()
 
-    def forward(self, x):
-        x = x.flatten(start_dim=1)  # Flatten the input if not already
-        return self.predict(x)
+    def forward(self, x, **kwargs):
+        mask = kwargs['mask']
+        if 'TransformerEncoderLayer' in [layer['type'] for layer in self.config['model']['layers']]:
+            for module in self.model:
+                if isinstance(module, nn.TransformerEncoderLayer):
+                    x = module(x, src_key_padding_mask=mask)
+                else:
+                    x = module(x)
+        else:
+            x = self.model(x)
+        return x
             
 
 class WeibullCoxModel(BaseModel):

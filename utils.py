@@ -179,10 +179,16 @@ def evaluate_model(model, runid, test_loader):
     model.eval()
     with torch.no_grad():
         for batch in tqdm(test_loader):
-            pid, rid, x_batch, y_batch, u_batch, _, _ = batch
+            pid, rid, x_batch, y_batch, u_batch, mask_batch, _ = batch
             if method == 'ResNet':
                 x_batch = x_batch.unsqueeze(1)
-            outputs = model(x_batch).tolist()
+            if method == 'Transformer':
+                x_batch = x_batch.to(device)
+                mask_batch = mask_batch.to(device)
+                outputs = model(x_batch, mask=mask_batch).tolist()
+            else:
+                x_batch = x_batch.to(device)
+                outputs = model(x_batch).tolist()
             y_label.extend(y_batch.tolist())
             y_prob.extend(outputs)
             for i, (p, r) in enumerate(zip(pid, rid)):
