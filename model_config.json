@@ -1,7 +1,7 @@
 {
     "data": {
-        "window_size": 24,
-        "start_offset": 6,
+        "window_size": 72,
+        "start_offset": 12,
         "columns": [
             "HR", "O2Sat", "Temp", "SBP", "MAP", "DBP", "Resp", "EtCO2",
             "BaseExcess", "HCO3", "FiO2", "pH", "PaCO2", "SaO2", "AST", "BUN",
@@ -13,15 +13,16 @@
         ]
     },
     "model": {
-        "input_shape": [24, 40],
+        "input_shape": [72, 40],
         "type": "Transformer",
         "layers": [
             {"type": "Linear", "in_features": 40, "out_features": 512},
-            {"type": "PositionalEncoding", "d_model": 512, "seq_len": 36, "dropout": 0.1},
+            {"type": "PositionalEncoding", "d_model": 512, "seq_len": 72, "dropout": 0.1},
             {"type": "TransformerEncoderLayer", "d_model": 512, "nhead": 8, "dim_feedforward": 2048, "dropout": 0.1, "batch_first": true},
             {"type": "Linear", "in_features": 512, "out_features": 1},
             {"type": "MaxLayer"},
             {"type": "Sigmoid"}
-        ]
+        ],
+        "saved_path": "../models/Transformer_rich-snowflake-30_29_0.00062_07_17_2024_01_12_50.pth"
     }
 }
