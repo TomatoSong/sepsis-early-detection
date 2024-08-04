@@ -24,7 +24,11 @@ processing = {
 }
 
 class SepsisDataset(Dataset):
+<<<<<<< Updated upstream
     def __init__(self, patient_ids, seq_len, starting_offset, columns, method='standardized'):
+=======
+    def __init__(self, patient_ids, seq_len=72, starting_offset=24, horizon=6, cols=COLS, method='standardized'):
+>>>>>>> Stashed changes
         self.patient_ids = patient_ids
         self.columns = columns
         self.method = method
