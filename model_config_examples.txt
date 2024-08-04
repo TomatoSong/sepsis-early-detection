@@ -21,6 +21,7 @@
     "data": {
         "window_size": 6,
         "start_offset": 6,
+        "horizon": 6,
         "columns": [
             "HR", "O2Sat", "Temp", "SBP", "MAP", "DBP", "Resp", "EtCO2",
             "BaseExcess", "HCO3", "FiO2", "pH", "PaCO2", "SaO2", "AST", "BUN",
@@ -41,6 +42,7 @@
     "data": {
         "window_size": 6,
         "start_offset": 6,
+        "horizon": 6,
         "columns": [
             "HR", "O2Sat", "Temp", "SBP", "MAP", "DBP", "Resp", "EtCO2",
             "BaseExcess", "HCO3", "FiO2", "pH", "PaCO2", "SaO2", "AST", "BUN",
@@ -70,6 +72,7 @@
     "data": {
         "window_size": 6,
         "start_offset": 6,
+        "horizon": 6,
         "columns": [
             "HR", "O2Sat", "Temp", "SBP", "MAP", "DBP", "Resp", "EtCO2",
             "BaseExcess", "HCO3", "FiO2", "pH", "PaCO2", "SaO2", "AST", "BUN",
@@ -105,6 +108,7 @@
     "data": {
         "window_size": 72,
         "start_offset": 12,
+        "horizon": 6,
         "columns": [
             "HR", "O2Sat", "Temp", "SBP", "MAP", "DBP", "Resp", "EtCO2",
             "BaseExcess", "HCO3", "FiO2", "pH", "PaCO2", "SaO2", "AST", "BUN",

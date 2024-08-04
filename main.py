@@ -24,6 +24,7 @@ from prepare import train_test_split
 def build_dataset(dataset, model_type, data_config, downsample):
     window_size = data_config["window_size"]
     start_offset = data_config["start_offset"]
+    horizon = data_config["horizon"]
     columns = data_config["columns"]
     
     if dataset == 'synthetic':
@@ -56,8 +57,8 @@ def build_dataset(dataset, model_type, data_config, downsample):
             train_ids.sort()
     
         if not model_type == 'WeibullCox':
-            dataset = SepsisDataset(train_ids, window_size, start_offset, columns)
-            testset = SepsisDataset(test_ids, window_size, start_offset, columns)
+            dataset = SepsisDataset(train_ids, window_size, start_offset, horizon, columns)
+            testset = SepsisDataset(test_ids, window_size, start_offset, horizon, columns)
             print(f'Composition of datasets: train {dataset.get_ratio()} test {testset.get_ratio()}')
         else:
             dataset = WeibullCoxDataset(train_ids)

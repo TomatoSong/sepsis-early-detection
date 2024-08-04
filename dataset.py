@@ -24,16 +24,13 @@ processing = {
 }
 
 class SepsisDataset(Dataset):
-<<<<<<< Updated upstream
-    def __init__(self, patient_ids, seq_len, starting_offset, columns, method='standardized'):
-=======
-    def __init__(self, patient_ids, seq_len=72, starting_offset=24, horizon=6, cols=COLS, method='standardized'):
->>>>>>> Stashed changes
+    def __init__(self, patient_ids, seq_len, starting_offset, horizon, cols, method='standardized'):
         self.patient_ids = patient_ids
-        self.columns = columns
+        self.columns = cols
         self.method = method
         self.seq_len = seq_len
         self.ratio = [0,0]
+        self.horizon = horizon
         self.idxmap_subset = self.build_index_map(seq_len, starting_offset)
         
     def check_store(self, seq_len, starting_offset):
@@ -67,11 +64,15 @@ class SepsisDataset(Dataset):
             if not os.path.exists(path):
                 for pid in tqdm(range(40336), desc="Building idx map", ascii=False, ncols=75):
                     p = get_patient_by_id_standardized(pid)
+                    if not (p['SepsisLabel'] == 0).all():
+                        sepsis_6 = p['SepsisLabel'].idxmax()
+                    else:
+                        sepsis_6 = -1
                     if len(p) < starting_offset:
                         t = len(p)-1
                         label = int(p.at[t, 'SepsisLabel'])
                         u_weights = [p.loc[t, 'UtilityNeg'], p.loc[t, 'UtilityPos']]
-                        hist = (pid,0,t,label,u_weights,seq_len-t-1) # patient id, start, end, label, utility, padding
+                        hist = (pid,0,t,label,u_weights,seq_len-t-1,sepsis_6) # patient id, start, end, label, utility, padding, sepsis_6
                         assert hist[2] < len(p)
                         assert hist[2]-hist[1]+1+hist[5] == seq_len
                         index_map.append(hist)
@@ -84,7 +85,7 @@ class SepsisDataset(Dataset):
                         for t in range(starting_offset-1,len(p)):
                             label = int(p.at[t, 'SepsisLabel'])
                             u_weights = [p.loc[t, 'UtilityNeg'], p.loc[t, 'UtilityPos']]
-                            hist = (pid,0,t,label,u_weights,seq_len-t-1) if t < seq_len else (pid,t-seq_len+1,t,label,u_weights,0)
+                            hist = (pid,0,t,label,u_weights,seq_len-t-1,sepsis_6) if t < seq_len else (pid,t-seq_len+1,t,label,u_weights,0,sepsis_6)
                             assert hist[2] < len(p)
                             assert hist[2]-hist[1]+1+hist[5] == seq_len
                             index_map.append(hist)
@@ -132,12 +133,16 @@ class SepsisDataset(Dataset):
         return (len(self.idxmap_subset))
 
     def __getitem__(self, idx):
-        pid, start, end, label, u_weights, padding = self.idxmap_subset[idx]
+        pid, start, end, label, u_weights, padding, sepsis_6 = self.idxmap_subset[idx]
         data = get_patient_data(pid, start, end)
         data = [[0]*len(self.columns)]*padding + data
         mask = [True]*padding + [False]*(self.seq_len-padding)
         assert len(data) == self.seq_len
         assert len(mask) == self.seq_len
+        if self.horizon != 6 and sepsis_6 > 0:
+            sepsis_horizon = sepsis_6 - (self.horizon - 6)
+            if sepsis_horizon <= end:
+                label = 1
         # Return: patient_id, latest_hour, clinical_data, label, utility_weights, mask, empty_tensor
         return pid, end, torch.tensor(data, dtype=torch.float32), torch.tensor(label, dtype=torch.float32), torch.tensor(u_weights), torch.tensor(mask), torch.tensor([])
 
