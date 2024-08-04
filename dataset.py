@@ -24,16 +24,18 @@ processing = {
 }
 
 class SepsisDataset(Dataset):
-    def __init__(self, patient_ids, seq_len, starting_offset, horizon, cols, method='standardized'):
+    def __init__(self, patient_ids, config, method='standardized'):
+        self.seq_len = config["window_size"]
+        self.horizon = config["horizon"]
+        self.columns = config["columns"]
+        self.start_offset = config["start_offset"]
+    
         self.patient_ids = patient_ids
-        self.columns = cols
         self.method = method
-        self.seq_len = seq_len
         self.ratio = [0,0]
-        self.horizon = horizon
-        self.idxmap_subset = self.build_index_map(seq_len, starting_offset)
+        self.idxmap_subset = self.build_index_map(self.seq_len, self.start_offset)
         
-    def check_store(self, seq_len, starting_offset):
+    def check_store(self, seq_len, start_offset):
         try:
             directory = '../data/idxmap_subset/'
             for filename in os.listdir(directory):
@@ -42,7 +44,7 @@ class SepsisDataset(Dataset):
                 if len(matches) < 2:
                     print("Illegal idx map file found {}!".format(filename))
                     continue
-                if int(matches[0]) == seq_len and int(matches[1]) == starting_offset:
+                if int(matches[0]) == seq_len and int(matches[1]) == start_offset:
                     f = os.path.join(directory, filename)
                     with open(f, "r") as fp:
                         info = json.load(fp)
@@ -53,10 +55,10 @@ class SepsisDataset(Dataset):
             print(f"An error occurred during file search: {e}")
         return None
         
-    def build_index_map(self, seq_len, starting_offset):
-        index_map_subset = self.check_store(seq_len, starting_offset)
+    def build_index_map(self, seq_len, start_offset):
+        index_map_subset = self.check_store(seq_len, start_offset)
         if not index_map_subset:
-            path = '../data/idxmap_'+str(seq_len)+'_'+str(starting_offset)+".json"
+            path = '../data/idxmap_'+str(seq_len)+'_'+str(start_offset)+".json"
             index_map = []
             index_map_subset = []
             patients_subset = set()
@@ -68,7 +70,7 @@ class SepsisDataset(Dataset):
                         sepsis_6 = p['SepsisLabel'].idxmax()
                     else:
                         sepsis_6 = -1
-                    if len(p) < starting_offset:
+                    if len(p) < start_offset:
                         t = len(p)-1
                         label = int(p.at[t, 'SepsisLabel'])
                         u_weights = [p.loc[t, 'UtilityNeg'], p.loc[t, 'UtilityPos']]
@@ -82,7 +84,7 @@ class SepsisDataset(Dataset):
                             self.ratio[label] += 1
                             patients_subset.add(pid)
                     else:
-                        for t in range(starting_offset-1,len(p)):
+                        for t in range(start_offset-1,len(p)):
                             label = int(p.at[t, 'SepsisLabel'])
                             u_weights = [p.loc[t, 'UtilityNeg'], p.loc[t, 'UtilityPos']]
                             hist = (pid,0,t,label,u_weights,seq_len-t-1,sepsis_6) if t < seq_len else (pid,t-seq_len+1,t,label,u_weights,0,sepsis_6)
@@ -115,7 +117,7 @@ class SepsisDataset(Dataset):
             dirname = '../data/idxmap_subset/'
             if not os.path.exists(dirname):
                 os.mkdir(dirname)
-            path = dirname + 'idxmap_subset_'+str(seq_len)+'_'+str(starting_offset)+'_'+str(len(index_map_subset))+".json"
+            path = dirname + 'idxmap_subset_'+str(seq_len)+'_'+str(start_offset)+'_'+str(len(index_map_subset))+".json"
             with open(path, "w") as fp:
                 json.dump(dict(patient_ids=self.patient_ids,
                                ratio = self.ratio,
@@ -175,14 +177,14 @@ class RawDataset(Dataset):
 
 
 class SyntheticDataset(Dataset):
-    def __init__(self, pids, seq_len, starting_offset, columns):
+    def __init__(self, pids, seq_len, start_offset, columns):
         self.seq_len = seq_len
         self.patient_ids = pids
         self.columns = columns
         self.ratio = [0,0]
-        self.idxmap_subset = self.build_index_map(seq_len, starting_offset)
+        self.idxmap_subset = self.build_index_map(seq_len, start_offset)
 
-    def check_store(self, seq_len, starting_offset):
+    def check_store(self, seq_len, start_offset):
         try:
             directory = '../data/idxmap_subset/'
             for filename in os.listdir(directory):
@@ -191,7 +193,7 @@ class SyntheticDataset(Dataset):
                 if len(matches) < 2:
                     print("Illegal idx map file found {}!".format(filename))
                     continue
-                if int(matches[0]) == seq_len and int(matches[1]) == starting_offset:
+                if int(matches[0]) == seq_len and int(matches[1]) == start_offset:
                     f = os.path.join(directory, filename)
                     with open(f, "r") as fp:
                         info = json.load(fp)
@@ -201,10 +203,10 @@ class SyntheticDataset(Dataset):
             print(f"An error occurred during file search: {e}")
         return None
         
-    def build_index_map(self, seq_len, starting_offset):
-        index_map_subset = self.check_store(seq_len, starting_offset)
+    def build_index_map(self, seq_len, start_offset):
+        index_map_subset = self.check_store(seq_len, start_offset)
         if not index_map_subset:
-            path = '../data/syn_idxmap_'+str(seq_len)+'_'+str(starting_offset)+".json"
+            path = '../data/syn_idxmap_'+str(seq_len)+'_'+str(start_offset)+".json"
             index_map = []
             index_map_subset = []
             patients_subset = set()
@@ -212,7 +214,7 @@ class SyntheticDataset(Dataset):
             if not os.path.exists(path):
                 for pid in tqdm(range(10000), desc="Building idx map", ascii=False, ncols=75):
                     p = get_patient_by_id_original(pid)
-                    if len(p) < starting_offset:
+                    if len(p) < start_offset:
                         t = len(p)-1
                         label = int(p.at[t, 'SepsisLabel'])
                         hist = (pid,0,t,label,seq_len-t-1) # patient id, start, end, label, padding
@@ -225,7 +227,7 @@ class SyntheticDataset(Dataset):
                             self.ratio[label] += 1
                             patients_subset.add(pid)
                     else:
-                        for t in range(starting_offset-1,len(p)):
+                        for t in range(start_offset-1,len(p)):
                             label = int(p.at[t, 'SepsisLabel'])
                             hist = (pid,0,t,label, seq_len-t-1) if t < seq_len else (pid,t-seq_len+1,t,label,0)
                             assert hist[2] < len(p)
@@ -254,7 +256,7 @@ class SyntheticDataset(Dataset):
             assert len(patients_subset) == len(self.patient_ids)
             assert patients_subset == set(self.patient_ids)
             print('len idxmap {}'.format(len(index_map)))
-            path = '../data/idxmap_subset/syn_idxmap_subset_'+str(seq_len)+'_'+str(starting_offset)+'_'+str(len(index_map_subset))+".json"
+            path = '../data/idxmap_subset/syn_idxmap_subset_'+str(seq_len)+'_'+str(start_offset)+'_'+str(len(index_map_subset))+".json"
             with open(path, "w") as fp:
                 json.dump(dict(patient_ids=self.patient_ids, index_map_subset=index_map_subset), fp)
         
