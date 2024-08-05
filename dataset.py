@@ -12,7 +12,7 @@ import ast
 import sys
 
 from utils import get_patient_by_id_original, get_patient_by_id_standardized, get_patient_data, get_synthetic_patient_by_id
-from config import All_COLS
+from config import All_COLS, COL_IDX_MAP
 
 DATA_FOLDER = "../data"
 processing = {
@@ -29,7 +29,10 @@ class SepsisDataset(Dataset):
         self.horizon = config["horizon"]
         self.columns = config["columns"]
         self.start_offset = config["start_offset"]
-    
+        
+        self.col_indices = [COL_IDX_MAP[i] for i in self.columns]
+        self.col_indices.sort()
+        
         self.patient_ids = patient_ids
         self.method = method
         self.ratio = [0,0]
@@ -150,7 +153,7 @@ class SepsisDataset(Dataset):
 
 
 class RawDataset(Dataset):
-    def __init__(self, pids):
+    def __init__(self, pids, config):
         self.build_index_map(pids)
         
     def build_index_map(self, pids):

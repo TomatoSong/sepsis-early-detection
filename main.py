@@ -52,8 +52,13 @@ def build_dataset(dataset, model_type, data_config, downsample):
             train_ids.sort()
     
         if not model_type == 'WeibullCox':
-            dataset = SepsisDataset(train_ids, data_config)
-            testset = SepsisDataset(test_ids, data_config)
+            dataset_type = data_config["dataset"]
+            dataset_class = globals().get(dataset_type)
+            try:
+                dataset = dataset_class(train_ids, data_config)
+                testset = dataset_class(test_ids, data_config)
+            except ValueError as err:
+                print((f'Dataset type {dataset_type} not found!'))
             print(f'Composition of datasets: train {dataset.get_ratio()} test {testset.get_ratio()}')
         else:
             dataset = WeibullCoxDataset(train_ids)

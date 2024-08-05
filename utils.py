@@ -62,9 +62,9 @@ def prepare_hdf5():
             grp = f.create_group(f'patient_{pid}')
             grp.create_dataset('data', data=p.to_numpy(), compression='gzip')
 
-def get_patient_data(pid, start, end):
+def get_patient_data(pid, start, end, col_indices):
     with h5py.File('../data/patient_data.h5', 'r') as f:
-        data = f[f'patient_{pid}/data'][start:end+1]
+        data = f[f'patient_{pid}/data'][start:end+1, col_indices]
     return data.tolist()
 
 def get_synthetic_patient_data(pid, start, end):
