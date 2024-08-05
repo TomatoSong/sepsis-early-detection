@@ -17,7 +17,7 @@ import math
 
 from utils import get_patient_by_id_standardized, get_patient_by_id_original
 from config import *
-from loss import UtilityLoss
+from loss import UtilityLoss, MultiTaskLoss
 
 def get_dataloaders(data, train_idx, val_idx, batch_size=256, num_workers=24):
     train_subset = Subset(data, train_idx)
@@ -348,6 +348,203 @@ class TransformerModel(BaseModel):
         else:
             x = self.model(x)
         return x
+
+
+class MultiTaskModel(nn.Module):
+    def __init__(self, input_size, config):
+        super().__init__()
+        self.method = 'MultiTask'
+        self.config = config
+        self.make_modules(config['model']['modules'])
+
+    def load_saved_model(self):
+        if self.model_path:
+            state_dict = torch.load(self.model_path, map_location='cpu')
+            cleaned_state_dict = {k.replace('module.', ''): v for k, v in state_dict.items()}
+            try:
+                self.load_state_dict(cleaned_state_dict)
+                print('Loaded saved model ' + self.model_path)
+            except:
+                print('Failed loading model ' + self.model_path)
+                sys.exit()
+        else:
+            print('Not using saved model.')
+            
+        return
+
+    def save_model(self, model, rid, epoch, loss):
+        if not os.path.exists('../models'):
+            os.mkdir(dirpath)
+        now = datetime.now()
+        timestr = now.strftime("%m_%d_%Y_%H_%M_%S")
+        model_path = '../models/{}_{}_{:.5f}_{}.pth'.format(rid, epoch, loss, timestr)
+        torch.save(copy.deepcopy(model).cpu().state_dict(), model_path)
+        self.model_path = model_path
+        return
+
+    def make_layers(self, layers_config):
+        layers = []
+
+        for layer in layers_config:
+            layer_type = layer.pop('type')
+            layer_class = globals().get(layer_type)
+            try:
+                if layer_class:
+                    layers.append(layer_class(**layer))
+                else:
+                    layer_class = getattr(nn, layer_type)
+                    layers.append(layer_class(**layer))
+                layer['type'] = layer_type
+            except ValueError as err:
+                print((f'Layer type {layer_type} not found in local or nn'))
+    
+        return nn.Sequential(*layers)
+
+    def make_modules(self, model_config):
+        self.embedding = self.make_layers(model_config['embedding'])
+        self.encoder = self.make_layers(model_config['encoder'])
+        self.reconstructor = self.make_layers(model_config['reconstructor'])
+        self.forecaster = self.make_layers(model_config['forecaster'])
+        self.classifier = self.make_layers(model_config['classifier'])
+
+    def module_forward(self, module, x, hidden_state):
+        for layer in module:
+            if isinstance(layer, nn.TransformerDecoderLayer):
+                x = layer(x, hidden_state)
+            else:
+                x = layer(x)
+        return x
+
+    def forward(self, x, mask):
+        x = self.embedding(x)
+        hidden_state = self.encoder(x)
+        reconstruct = self.module_forward(self.reconstructor, x, hidden_state)
+        forecast = self.module_forward(self.forecaster, x, hidden_state)
+        classification = self.classifier(hidden_state)
+        return reconstruct, forecast, classification
+
+    def train_model(self, dataset, use_val=False, epochs=50, batch_size=256, pos_weight=54.5, lr=0.001, loss_criterion='MultiTask', logging=False, num_workers=24):
+        if use_val:
+            data_indices = np.arange(len(dataset))
+            kf = KFold(n_splits=10, shuffle=True, random_state=42)
+            folds = []
+            for train_idx, val_idx in kf.split(data_indices):
+                folds.append((train_idx, val_idx))
+            num_folds = len(folds)
+            train_len = len(folds[0][0])
+            valid_len = len(folds[0][1])
+            assert train_len + valid_len == len(dataset), "Error during train-validation split!"
+        else:
+            train_loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers)
+            valid_loader = None
+            train_len = len(dataset)
+
+        method = self.method
+        
+        # start a new wandb run to track this script
+        if logging:
+            run = wandb.init(
+                project = wandb_project,
+                config = {
+                    "architecture"       : method,
+                    "model_config"       : self.config,
+                    "dataset"            : "Competition2019",
+                    "preprocessing"      : "standardized",
+                    "batch_size"         : batch_size,
+                    "learning_rate"      : lr,
+                    "epochs"             : epochs,
+                    "pos_weight"         : pos_weight
+                }
+            )
+            rid = method + '_' + run.name
+        else:
+            rid = method + '_trial'
+
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        print(device)
+
+        self = self.to(device)
+        self = torch.nn.DataParallel(self)
+
+        weights = {
+            'reconstruction': 1,
+            'forecasting': 1,
+            'classification': 10
+        }
+        criterion = MultiTaskLoss(pos_weight, weights).to(device)
+        optimizer = optim.Adam(self.parameters(), lr=lr, weight_decay=0.01)
+
+        try:
+            for epoch in range(epochs):
+                print('====== Epoch {} ======'.format(epoch))
+                if use_val:
+                    current_fold = epoch % num_folds
+                    train_idx, val_idx = folds[current_fold]
+                    train_loader, valid_loader = get_dataloaders(dataset, train_idx, val_idx, batch_size, num_workers)
+
+                self.train()
+                total_loss = 0
+
+                for batch in tqdm(train_loader):
+                    _, _, x_batch, y_batch, u_batch, mask_batch, future_batch = batch
+                    y_batch = y_batch.unsqueeze(1)
+                    x_batch, y_batch, u_batch = x_batch.to(device), y_batch.to(device), u_batch.to(device)
+                    future_batch, mask_batch = future_batch.to(device), mask_batch.to(device)
+                    optimizer.zero_grad()
+                    reconstruct, forecast, classification = self.forward(x_batch, mask_batch)
+                    loss = criterion(reconstruct, forecast, classification, x_batch, future_batch, y_batch)
+                    loss.backward()
+                    torch.nn.utils.clip_grad_norm_(self.parameters(), 0.5)
+                    optimizer.step()
+                    total_loss += loss.item()
+                print(f'Train Loss: {total_loss / train_len}')
+
+                if valid_loader:
+                    # Validation loop
+                    self.eval()
+                    total_val_loss = 0
+                    with torch.no_grad():
+                        for batch in valid_loader:
+                            _, _, x_batch, y_batch, u_batch, mask_batch, future_batch = batch
+                            y_batch = y_batch.unsqueeze(1)
+                            x_batch, y_batch, u_batch = x_batch.to(device), y_batch.to(device), u_batch.to(device)
+                            future_batch, mask_batch = future_batch.to(device), mask_batch.to(device)
+                            reconstruct, forecast, classification = self.forward(x_batch, mask_batch)
+                            loss = criterion(reconstruct, forecast, classification, x_batch, future_batch, y_batch)
+                            total_val_loss += loss.item()
+                    print(f'Validation Loss: {total_val_loss / valid_len}')
+
+                if logging:
+                    if valid_loader:
+                        wandb.log({
+                            "Train loss"     : total_loss     / train_len,
+                            "Validation loss": total_val_loss / valid_len
+                        })
+                    else:
+                        wandb.log({
+                            "Train loss"     : total_loss     / train_len
+                        })
+
+                if (epoch+1) % 5 == 0:
+                    epoch_loss = total_loss / train_len
+                    self.save_model(self, rid, epoch, epoch_loss)
+
+            self.load_saved_model()
+
+        except KeyboardInterrupt:
+            print("\nTraining interrupted by the user at Epoch {}.".format(epoch))
+            print("Last saved {}".format(5*((epoch+1)//5)-1))
+
+        except Exception as e:
+            print("An error occurred:", str(e))
+            print("Last saved {}".format(5*((epoch+1)//5)-1))
+            pass
+
+        if logging:
+            wandb.finish()
+        
+        return rid
+        
             
 
 class WeibullCoxModel(BaseModel):

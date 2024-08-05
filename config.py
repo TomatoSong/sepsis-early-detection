@@ -23,7 +23,7 @@ synthetic_test_ids_filepath = '../data/synthetic_test_ids.json'
 label_dirpath = '../results/labels/'
 normals_filepath = "../data/normals.json"
 
-wandb_project = 'sepsis-prediction'
+wandb_project = 'hypoxia'
 
 preprocess_method = "standardized_padded"
 

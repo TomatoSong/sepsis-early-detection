@@ -81,6 +81,8 @@ def build_model(model_type, config, model_path):
         model = ResNetModel(input_shape, 1, config, model_path)
     elif model_type == 'Transformer':
         model = TransformerModel(input_shape, 1, config, model_path)
+    elif model_type == 'MultiTask':
+        model = MultiTaskModel(input_shape, config)
     elif model_type == 'WeibullCox':
         if window_size > 1:
             raise Exception("Weibull-Cox model got window size > 1!")
@@ -163,10 +165,15 @@ if __name__ == "__main__":
 
     if not args.skip_eval:
         test_loader = DataLoader(testset, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers)
-        results, y_label, y_prob = evaluate_model(model, rid, test_loader)
-        cutoff = plot_curves(rid+'_test', y_label, y_prob)
-        y_label, y_pred, pred_dirpath = save_pred(results, cutoff, rid)
-        print('Using cutoff {}'.format(cutoff))
-        print_confusion_matrix(y_label, y_pred)
-        auroc, auprc, accuracy, f_measure, utility = evaluate_sepsis_score(label_dirpath, pred_dirpath)
-        print('AUROC     {:.4f} \nAUPRC     {:.4f} \nAccuracy  {:.4f} \nF-measure {:.4f} \nUtility   {:.4f}\n'.format(auroc, auprc, accuracy, f_measure, utility))
+        if not args.model_type == 'MultiTask':
+            results, y_label, y_prob = evaluate_model(model, rid, test_loader)
+            cutoff = plot_curves(rid+'_test', y_label, y_prob)
+            y_label, y_pred, pred_dirpath = save_pred(results, cutoff, rid)
+            print('Using cutoff {}'.format(cutoff))
+            print_confusion_matrix(y_label, y_pred)
+            auroc, auprc, accuracy, f_measure, utility = evaluate_sepsis_score(label_dirpath, pred_dirpath)
+            print('AUROC     {:.4f} \nAUPRC     {:.4f} \nAccuracy  {:.4f} \nF-measure {:.4f} \nUtility   {:.4f}\n'.format(auroc, auprc, accuracy, f_measure, utility))
+        else:
+            y_label, y_prob = evaluate_multitask_model(model, rid, test_loader)
+            y_pred = [1 if i >=0.5 else 0 for i in y_prob]
+            print_confusion_matrix(y_label, y_pred)

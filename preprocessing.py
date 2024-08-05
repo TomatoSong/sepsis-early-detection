@@ -168,5 +168,13 @@ for i in tqdm(range(40336), desc="Computing Utility Series", ascii=False, ncols=
     p['UtilityNeg'] = u_pred_neg
     p.to_csv('../data/standardized/p'+str(i).zfill(6)+'.csv', index=False)
 
+## Compute Hypoxia Labels
+for i in tqdm(range(40336), desc="Computing Hypoxia Labels", ascii=False, ncols=75):
+    p = get_patient_by_id_imputed(i)
+    col = (p['O2Sat'] < 92).astype(int)
+    p = get_patient_by_id_standardized(i)
+    p['Hypoxia'] = col
+    p.to_csv('../data/standardized/p'+str(i).zfill(6)+'.csv', index=False)
+
 ### Use hdf5 for more efficient data accessing
 prepare_hdf5()

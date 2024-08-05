@@ -57,7 +57,7 @@ def get_synthetic_patient_by_id(idx):
 
 def prepare_hdf5():
     with h5py.File('../data/patient_data.h5', 'w') as f:
-        for pid in tqdm(range(40336)):
+        for pid in tqdm(range(40336), desc="Storing in hdf5 format", ascii=False, ncols=75):
             p = get_patient_by_id_standardized(pid)[All_COLS]
             grp = f.create_group(f'patient_{pid}')
             grp.create_dataset('data', data=p.to_numpy(), compression='gzip')
@@ -244,4 +244,42 @@ def plot_trainset_curves(model, train_loader, rid):
             y_prob.extend(outputs.tolist())
     
     plot_curves(rid+'_train', y_true, y_prob)
+
+def evaluate_multitask_model(model, runid, test_loader):
+    y_prob = []
+    y_label = []
+    method = model.method
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    model = model.to(device)
+    model = torch.nn.DataParallel(model)
+    model.eval()
+
+    r_criterion = nn.MSELoss()
+    f_criterion = nn.MSELoss()
+    c_criterion = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([pos_weight]))
+
+    r_loss = 0
+    f_loss = 0
+    c_loss = 0
+    
+    with torch.no_grad():
+        for batch in tqdm(test_loader):
+            _, _, x_batch, y_batch, u_batch, mask_batch, future_batch = batch
+            y_batch = y_batch.unsqueeze(1)
+            x_batch, y_batch, u_batch = x_batch.to(device), y_batch.to(device), u_batch.to(device)
+            future_batch, mask_batch = future_batch.to(device), mask_batch.to(device)
+            reconstruct, forecast, classification = model.forward(x_batch, mask_batch)
+            y_label.extend(y_batch.tolist())
+            y_prob.extend(classification.squeeze(1).tolist())
+
+            r_loss += r_criterion(reconstruct, x_batch)
+            f_loss += f_criterion(forecast, future_batch)
+            c_loss += c_criterion(classification, y_batch)
+    print(" Reconstruction {}\n Forecasting {}\n Classification {}".format(
+        r_loss.item() / len(testloader),
+        f_loss.item() / len(testloader),
+        c_loss.item() / len(testloader)
+    ))
+
+    return y_label, y_prob
 

@@ -133,3 +133,46 @@
         "saved_path": "../models/Transformer_rich-snowflake-30_29_0.00062_07_17_2024_01_12_50.pth"
     }
 }
+
+{
+    "data": {
+        "dataset": "MultiTaskDataset",
+        "window_size": 6,
+        "start_offset": 6,
+        "horizon": 6,
+        "lead": 0,
+        "forecast_len": 6,
+        "target": "Hypoxia",
+        "columns": [
+            "HR", "O2Sat", "SBP", "MAP", "DBP",
+            "Resp", "EtCO2", "FiO2", "PaCO2", "SaO2",
+            "BaseExcess", "HCO3", "pH", "Lactate", "Hgb", "Temp"
+        ]
+    },
+    "model": {
+        "type": "MultiTask",
+        "input_shape": [6, 16],
+        "modules": {
+            "embedding": [
+                {"type": "Linear", "in_features": 16, "out_features": 256},
+                {"type": "PositionalEncoding", "d_model": 256, "seq_len": 6, "dropout": 0.1}
+            ],
+            "encoder": [
+                {"type": "TransformerEncoderLayer", "d_model": 256, "nhead": 8, "dim_feedforward": 1024, "dropout": 0.1, "batch_first": true}
+            ],
+            "reconstructor": [
+                {"type": "TransformerDecoderLayer", "d_model": 256, "nhead": 8, "dim_feedforward": 1024, "dropout": 0.1, "batch_first": true},
+                {"type": "Linear", "in_features": 256, "out_features": 16}
+            ],
+            "forecaster": [
+                {"type": "TransformerDecoderLayer", "d_model": 256, "nhead": 8, "dim_feedforward": 1024, "dropout": 0.1, "batch_first": true},
+                {"type": "Linear", "in_features": 256, "out_features": 16}
+            ],
+            "classifier": [
+                {"type": "Linear", "in_features": 256, "out_features": 1},
+                {"type": "MaxLayer"},
+                {"type": "Sigmoid"}
+            ]
+        }
+    }
+}
