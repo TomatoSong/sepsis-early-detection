@@ -1,7 +1,7 @@
 import json
 import random
 import os
-from config import sepsis_ids_filepath, train_ids_filepath, test_ids_filepath
+from config import sepsis_ids_filepath, train_ids_filepath, test_ids_filepath, pos_pos_idxmap_prefix
 from utils import get_patient_by_id_original, get_patient_by_id_standardized
 
 def train_test_split():
@@ -55,4 +55,50 @@ def train_test_split():
         label = p['SepsisLabel']
         filename = dirpath + '/p' + str(pid).zfill(6) + '.psv'
         label.to_csv(filename, mode='w+', index=False, header=True, sep='|')
-                
+
+
+def find_train_pos():
+    with open(sepsis_ids_filepath, "r") as fp:
+        sepsis_ids = json.load(fp)
+
+    with open(train_ids_filepath, "r") as f:
+        train_ids = json.load(f)
+
+    train_pos = [i for i in train_ids if i in sepsis_ids]
+    with open(train_pos_filepath, "w") as f:
+        json.dump(train_pos, f)
+
+
+def build_pos_pos_idxmap(seq_len, starting_offset):
+    with open(sepsis_ids_filepath, "r") as fp:
+        sepsis_ids = json.load(fp)
+
+    fname = pos_pos_idxmap_prefix + str(seq_len) + '_' + str(starting_offset)
+    if os.path.exists(fname):
+      return
+
+    idxmap = []
+    for pid in sepsis_ids:
+        p = get_patient_by_id_standardized(pid)
+        sepsis_time_ad6 = p['SepsisLabel'].idxmax()
+        for t in range(sepsis_time_ad6, len(p)):
+            u_weights = [p.loc[t, 'UtilityNeg'], p.loc[t, 'UtilityPos']]
+            start = t-seq_len+1
+            padding = seq_len-t-1 if t < seq_len else 0
+            if start < 0:
+                continue
+            hist = (
+                pid,
+                start,
+                t,
+                1,
+                u_weights,
+                padding
+            )
+            assert hist[2] < len(p)
+            assert hist[2]-hist[1]+1+hist[5] == seq_len
+            idxmap.append(hist)
+    print('populated {} patients into {} timeseries'.format(len(sepsis_ids), len(idxmap)))
+    with open(fname, "w") as fp:
+        json.dump(idxmap, fp)
+    

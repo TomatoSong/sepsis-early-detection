@@ -18,7 +18,7 @@ from evaluate import evaluate_sepsis_score
 from config import *
 from models import *
 from dataset import *
-from prepare import train_test_split
+from prepare import *
 
 
 def build_dataset(dataset, model_type, data_config, downsample):
@@ -35,6 +35,16 @@ def build_dataset(dataset, model_type, data_config, downsample):
 
         dataset = SyntheticDataset(train_ids, window_size, start_offset, columns)
         testset = SyntheticDataset(test_ids, window_size, start_offset,columns)
+    elif dataset == 'pospos':
+        if not (os.path.exists(train_ids_filepath)):
+            find_train_pos()
+        with open(train_ids_filepath, "r") as f:
+            train_pos = json.load(f)
+        with open(test_ids_filepath, "r") as f:
+            test_ids = json.load(f)
+        build_pos_pos_idxmap(window_size, start_offset)
+        dataset = PosPosDataset(train_pos, window_size, start_offset, columns)
+        testset = SepsisDataset(test_ids, window_size, start_offset, columns)
     else:
         if not (os.path.exists(train_ids_filepath) and os.path.exists(test_ids_filepath)):
             train_test_split()

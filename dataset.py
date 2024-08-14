@@ -12,7 +12,7 @@ import ast
 import sys
 
 from utils import get_patient_by_id_original, get_patient_by_id_standardized, get_patient_data, get_synthetic_patient_by_id
-from config import All_COLS
+from config import All_COLS, pos_pos_idxmap_prefix
 
 DATA_FOLDER = "../data"
 processing = {
@@ -129,6 +129,37 @@ class SepsisDataset(Dataset):
 
     def __getitem__(self, idx):
         pid, start, end, label, u_weights, padding = self.idxmap_subset[idx]
+        data = get_patient_data(pid, start, end)
+        data = [[0]*len(self.columns)]*padding + data
+        mask = [True]*padding + [False]*(self.seq_len-padding)
+        assert len(data) == self.seq_len
+        assert len(mask) == self.seq_len
+        # Return: patient_id, latest_hour, clinical_data, label, utility_weights, mask, empty_tensor
+        return pid, end, torch.tensor(data, dtype=torch.float32), torch.tensor(label, dtype=torch.float32), torch.tensor(u_weights), torch.tensor(mask), torch.tensor([])
+
+
+class PosPosDataset(Dataset):
+    def __init__(self, patient_ids, seq_len, starting_offset, columns, method='standardized'):
+        self.patient_ids = patient_ids
+        self.columns = columns
+        self.method = method
+        self.seq_len = seq_len
+        self.load_index_map(seq_len, starting_offset)
+        print("PosPos Dataset: using {} timeseries".format(len(self.idxmap)))
+
+    def load_index_map(self, seq_len, starting_offset):
+        fname = pos_pos_idxmap_prefix + str(seq_len) + '_' + str(starting_offset)
+        with open(fname, "r") as fp:
+            self.idxmap = json.load(fp)
+
+    def get_ratio(self):
+        return [0, len(self.idxmap)]
+
+    def __len__(self):
+        return (len(self.idxmap))
+
+    def __getitem__(self, idx):
+        pid, start, end, label, u_weights, padding = self.idxmap[idx]
         data = get_patient_data(pid, start, end)
         data = [[0]*len(self.columns)]*padding + data
         mask = [True]*padding + [False]*(self.seq_len-padding)
