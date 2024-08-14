@@ -254,9 +254,9 @@ def evaluate_multitask_model(model, runid, test_loader):
     model = torch.nn.DataParallel(model)
     model.eval()
 
-    r_criterion = nn.MSELoss()
-    f_criterion = nn.MSELoss()
-    c_criterion = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([pos_weight]))
+    r_criterion = torch.nn.MSELoss()
+    f_criterion = torch.nn.MSELoss()
+    c_criterion = torch.nn.BCEWithLogitsLoss()
 
     r_loss = 0
     f_loss = 0
@@ -276,9 +276,9 @@ def evaluate_multitask_model(model, runid, test_loader):
             f_loss += f_criterion(forecast, future_batch)
             c_loss += c_criterion(classification, y_batch)
     print(" Reconstruction {}\n Forecasting {}\n Classification {}".format(
-        r_loss.item() / len(testloader),
-        f_loss.item() / len(testloader),
-        c_loss.item() / len(testloader)
+        r_loss.item() / len(test_loader),
+        f_loss.item() / len(test_loader),
+        c_loss.item() / len(test_loader)
     ))
 
     return y_label, y_prob

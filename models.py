@@ -235,7 +235,6 @@ class LogisticRegressionModel(BaseModel):
         )
         self.model_path = model_path
         self.load_saved_model()
-        
 
             
 class MLPModel(BaseModel):
@@ -463,8 +462,9 @@ class MultiTaskModel(nn.Module):
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         print(device)
 
-        self = self.to(device)
-        self = torch.nn.DataParallel(self)
+        model = copy.deepcopy(self)
+        model = model.to(device)
+        model = torch.nn.DataParallel(model)
 
         weights = {
             'reconstruction': 1,
@@ -472,7 +472,7 @@ class MultiTaskModel(nn.Module):
             'classification': 10
         }
         criterion = MultiTaskLoss(pos_weight, weights).to(device)
-        optimizer = optim.Adam(self.parameters(), lr=lr, weight_decay=0.01)
+        optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=0.01)
 
         try:
             for epoch in range(epochs):
@@ -482,7 +482,7 @@ class MultiTaskModel(nn.Module):
                     train_idx, val_idx = folds[current_fold]
                     train_loader, valid_loader = get_dataloaders(dataset, train_idx, val_idx, batch_size, num_workers)
 
-                self.train()
+                model.train()
                 total_loss = 0
 
                 for batch in tqdm(train_loader):
@@ -491,17 +491,17 @@ class MultiTaskModel(nn.Module):
                     x_batch, y_batch, u_batch = x_batch.to(device), y_batch.to(device), u_batch.to(device)
                     future_batch, mask_batch = future_batch.to(device), mask_batch.to(device)
                     optimizer.zero_grad()
-                    reconstruct, forecast, classification = self.forward(x_batch, mask_batch)
+                    reconstruct, forecast, classification = model.forward(x_batch, mask_batch)
                     loss = criterion(reconstruct, forecast, classification, x_batch, future_batch, y_batch)
                     loss.backward()
-                    torch.nn.utils.clip_grad_norm_(self.parameters(), 0.5)
+                    torch.nn.utils.clip_grad_norm_(model.parameters(), 0.5)
                     optimizer.step()
                     total_loss += loss.item()
                 print(f'Train Loss: {total_loss / train_len}')
 
                 if valid_loader:
                     # Validation loop
-                    self.eval()
+                    model.eval()
                     total_val_loss = 0
                     with torch.no_grad():
                         for batch in valid_loader:
@@ -509,7 +509,7 @@ class MultiTaskModel(nn.Module):
                             y_batch = y_batch.unsqueeze(1)
                             x_batch, y_batch, u_batch = x_batch.to(device), y_batch.to(device), u_batch.to(device)
                             future_batch, mask_batch = future_batch.to(device), mask_batch.to(device)
-                            reconstruct, forecast, classification = self.forward(x_batch, mask_batch)
+                            reconstruct, forecast, classification = model.forward(x_batch, mask_batch)
                             loss = criterion(reconstruct, forecast, classification, x_batch, future_batch, y_batch)
                             total_val_loss += loss.item()
                     print(f'Validation Loss: {total_val_loss / valid_len}')
@@ -527,7 +527,7 @@ class MultiTaskModel(nn.Module):
 
                 if (epoch+1) % 5 == 0:
                     epoch_loss = total_loss / train_len
-                    self.save_model(self, rid, epoch, epoch_loss)
+                    self.save_model(model, rid, epoch, epoch_loss)
 
             self.load_saved_model()
 

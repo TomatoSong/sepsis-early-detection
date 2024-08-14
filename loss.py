@@ -19,12 +19,12 @@ class MultiTaskLoss(nn.Module):
         self.f_weight = weights['forecasting']
         self.c_weight = weights['classification']
 
-        self.r_loss = nn.MSELoss()
-        self.f_loss = nn.MSELoss()
-        self.c_loss = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([pos_weight]))
+        self.r_criterion = nn.MSELoss()
+        self.f_criterion = nn.MSELoss()
+        self.c_criterion = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([pos_weight]))
 
     def forward(self, reconstruct, forecast, classification, x_batch, future_batch, y_batch):
-        loss =  self.r_weight * self.r_loss(reconstruct, x_batch)
-        loss += self.f_weight * self.f_loss(forecast, future_batch)
-        loss += self.c_weight * self.c_loss(classification, y_batch)
-        return loss
+        r_loss = self.r_weight * self.r_criterion(reconstruct, x_batch)
+        f_loss = self.f_weight * self.f_criterion(forecast, future_batch)
+        c_loss = self.c_weight * self.c_criterion(classification, y_batch)
+        return r_loss + f_loss + c_loss
