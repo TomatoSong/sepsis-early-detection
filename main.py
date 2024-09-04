@@ -1,5 +1,6 @@
 import sys
 sys.path.insert(1, '../src')
+sys.path.insert(1, './BioGearPrep')
 import os
 import numpy as np
 import pandas as pd
@@ -19,6 +20,9 @@ from config import *
 from models import *
 from dataset import *
 from prepare import train_test_split
+from BioGearPrep.utils_biogear import *
+from BioGearPrep.prepare_biogear import train_test_split_biogear
+from BioGearPrep.biogear_dataset import *
 
 
 def build_dataset(dataset, model_type, data_config, downsample):
@@ -35,6 +39,20 @@ def build_dataset(dataset, model_type, data_config, downsample):
 
         dataset = SyntheticDataset(train_ids, window_size, start_offset, columns)
         testset = SyntheticDataset(test_ids, window_size, start_offset,columns)
+
+    elif dataset == "BioGear":
+        if not (os.path.exists(biogear_train_ids_filepath) and os.path.exists(biogear_test_ids_filepath)):
+            train_test_split_biogear()
+
+        with open(biogear_train_ids_filepath, "r") as f:
+            train_ids = json.load(f)
+        
+        with open(biogear_test_ids_filepath, "r") as f:
+            test_ids = json.load(f)
+
+        dataset = BioGearDataset(train_ids, window_size, window_size)
+        testset = BioGearDataset(test_ids, window_size, window_size)
+
     else:
         if not (os.path.exists(train_ids_filepath) and os.path.exists(test_ids_filepath)):
             train_test_split()
@@ -81,7 +99,7 @@ def build_model(model_type, config, model_path):
     elif model_type == 'Transformer':
         model = TransformerModel(input_shape, 1, config, model_path)
     elif model_type == 'WeibullCox':
-        if window_size > 1:
+        if input_shape[0] > 1:
             raise Exception("Weibull-Cox model got window size > 1!")
             sys.exit()
         model = WeibullCoxModel(model_path)
