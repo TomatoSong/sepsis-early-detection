@@ -69,6 +69,7 @@ class BaseModel(nn.Module):
         return
 
     def save_model(self, model, rid, epoch, loss):
+        dirpath = '../models'
         if not os.path.exists('../models'):
             os.mkdir(dirpath)
         now = datetime.now()
