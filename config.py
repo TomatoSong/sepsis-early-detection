@@ -16,10 +16,13 @@ ORGAN_N_LAYERS   = 4
 ORGAN_FF_DIM     = 128
 
 sepsis_ids_filepath = "../data/sepsis_ids.json"
+sepsis_ids_filepath_biogear = "../data/sepsis_indices_biogear.json"
 train_ids_filepath = "../data/train_ids.json"
 test_ids_filepath = "../data/test_ids.json"
 synthetic_train_ids_filepath = '../data/synthetic_train_ids.json'
 synthetic_test_ids_filepath = '../data/synthetic_test_ids.json'
+biogear_train_ids_filepath = '../data/biogear_train_ids.json'
+biogear_test_ids_filepath = '../data/biogear_test_ids.json'
 label_dirpath = '../results/labels/'
 normals_filepath = "../data/normals.json"
 
@@ -49,6 +52,25 @@ clinical_measurements_dict = {
     "Metabolism": ["BaseExcess", "HCO3", "pH", "Glucose", "Lactate", "Calcium"],
     "Demographic": ["Age", "Gender", "ICULOS"]
 }
+
+clinical_measurements_dict_biogear = {
+    "Cardiovascular": ["HR", "SAP", "MAP", "DAP", "CTSresistance", "CO", "CVP", "ABpH"],
+    "Respiratory": ["O2Sat", "Resp", "PaCO2", "ABpH", "CO2Sat"],
+    "Immune": ["CTemp", "WBC", "Stemp"],
+    "Coagulation": [],
+    "Renal": ["BUN", "Creatinine", "BaseExcess", "HCO3", "ABpH", "Chloride", "Magnesium", "Phosphate", "Potassium", "UR", "UPR"],
+    "Liver": ["Bilirubin_total"],
+    "Hematologic": ["Hgb", "Hct", "WBC", "HgbContent", "WBC"],
+    "Metabolism": ["BaseExcess", "HCO3", "ABpH", "Glucose", "Lactate", "Calcium"],
+    "Demographic": ["Age", "Gender", "ICULOS"]
+}
+
+COLS = ['HR', 'O2Sat', 'Temp', 'SBP', 'MAP', 'DBP', 'Resp', 'EtCO2',
+       'BaseExcess', 'HCO3', 'FiO2', 'pH', 'PaCO2', 'SaO2', 'AST', 'BUN',
+       'Alkalinephos', 'Calcium', 'Chloride', 'Creatinine',
+       'Bilirubin_direct', 'Glucose', 'Lactate', 'Magnesium', 'Phosphate',
+       'Potassium', 'Bilirubin_total', 'TroponinI', 'Hct', 'Hgb', 'PTT',
+       'WBC', 'Fibrinogen', 'Platelets', 'Age', 'Gender', 'ICULOS']
 
 
 organ_system_ids = {
