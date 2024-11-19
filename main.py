@@ -20,9 +20,9 @@ from config import *
 from models import *
 from dataset import *
 from prepare import train_test_split
-from BioGearPrep.utils_biogear import *
-from BioGearPrep.prepare_biogear import train_test_split_biogear
-from BioGearPrep.biogear_dataset import *
+# from BioGearPrep.utils_biogear import *
+# from BioGearPrep.prepare_biogear import train_test_split_biogear
+# from BioGearPrep.biogear_dataset import *
 
 
 def build_dataset(dataset, model_type, data_config, downsample):
@@ -121,7 +121,7 @@ if __name__ == "__main__":
     parser.add_argument('--skip-eval', action='store_true', help='Flag to skip model evaluation after trainig')
     parser.add_argument('--skip-train', action='store_true', help='Flag to skip training')
     parser.add_argument('--use-val', action='store_true', help='Flag to enable train validation split')
-    parser.add_argument('--dataset', type=str, default='physionet', help='Model architecture')
+    parser.add_argument('--dataset', type=str, default='physionet', help='Source of dataset')
     parser.add_argument('--logging', action='store_true', help='Flag to log to wandb')
     parser.add_argument('--num-workers', type=int, default=24, help='Number of workers for dataloader (default 24)')
     parser.add_argument('--loss', type=str, default='BCE', help='Loss criterion, default BCE')

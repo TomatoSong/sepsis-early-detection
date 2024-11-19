@@ -49,7 +49,7 @@ def train_test_split():
 
     ### Save label for test set
     dirpath = '../results/labels/'
-    os.mkdir(dirpath)
+    os.makedirs(dirpath, exist_ok=True)
     for pid in test_ids:
         p = get_patient_by_id_original(pid)
         label = p['SepsisLabel']

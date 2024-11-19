@@ -24,7 +24,7 @@ for fname in fnames1:
 for fname in fnames2:
     match = re.search(r'\.([^.]*)$', fname)
     if not match or match.group(1) != 'psv':
-        fnames1.remove(fname)
+        fnames2.remove(fname)
         
 fnames1.sort()
 fnames2.sort()
@@ -156,9 +156,10 @@ def save_pred(results, cutoff, rid):
     y_pred_trim = []
     y_pred = []
     y_label = []
-    dir_path = '../results/'+rid
 
     total_patient = len(results)
+    
+    dir_path = '../results/'+rid
     if not os.path.exists(dir_path):
         os.mkdir(dir_path)
     for pid, result in tqdm(results.items()):
@@ -222,6 +223,10 @@ def evaluate_model(model, runid, test_loader):
                 if not p.item() in results:
                     results[p.item()] = {}
                 results[p.item()][r.item()] = outputs[i] if isinstance(outputs[i], float) else outputs[i][0] 
+
+    dir_path = '../results'
+    if not os.path.exists(dir_path):
+        os.mkdir(dir_path)
 
     filename = '../results/{}_probs.json'.format(runid)
     with open(filename, 'w') as f:
